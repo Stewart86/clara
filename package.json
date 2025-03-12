@@ -1,0 +1,30 @@
+{
+  "name": "clara",
+  "version": "0.1.0",
+  "description": "An AI Assistant that provides clarity to your business codebase",
+  "main": "src/index.ts",
+  "bin": {
+    "clara": "./src/cli/index.ts"
+  },
+  "type": "module",
+  "scripts": {
+    "start": "bun src/index.ts",
+    "build": "bun build src/index.ts --outdir dist",
+    "dev": "bun --watch src/index.ts",
+    "test": "bun test",
+    "clara": "bun src/cli/index.ts"
+  },
+  "dependencies": {
+    "ai": "latest",
+    "@ai-sdk/openai": "latest",
+    "chalk": "^5.3.0",
+    "commander": "^11.1.0",
+    "zod": "^3.22.4"
+  },
+  "devDependencies": {
+    "typescript": "^5.3.3",
+    "@types/bun": "latest"
+  },
+  "packageManager": "yarn@1.22.22+sha512.a6b2f7906b721bba3d67d4aff083df04dad64c399707841b7acf00f6b133b7ac24255f2652fa22ae3534329dc6180534e98d17432037ff6fd140556e2bb3137e",
+  "private": true
+}
