@@ -299,11 +299,17 @@ Clara is designed to be extensible with custom agents and tools:
 
 ### Debug Mode
 
-Enable debug mode for verbose logging:
+Clara has two ways to enable debug logging:
+
+1. **Development Mode**: When running with `bun dev` or directly from source files, system logs are automatically shown
+
+2. **Production Mode**: When running the compiled binary, use the DEBUG environment variable:
 
 ```bash
 DEBUG=true clara interactive
 ```
+
+Debug logs show detailed system information including search operations, file access, and tool execution.
 
 ## License
 
