@@ -2,6 +2,7 @@ import path from "path";
 import os from "os";
 import fs from "fs/promises";
 import { log } from "../utils/logger.js";
+import { HOME_DIR, SETTING_DIR } from "../../constants.js";
 
 // Memory system configuration
 export const CONFIG = {
@@ -208,16 +209,12 @@ I'll start my investigation using these memory files to understand the project b
 }
 
 export function resolveMemoryPaths(projectPath: string = ""): {
-  homeDir: string;
   baseDir: string;
   resolvedProjectPath: string;
   projectMemoryDir: string;
 } {
-  // Get the home directory
-  const homeDir = os.homedir();
-
   // Get the base memory directory
-  const baseDir = path.join(homeDir, ".config", "clara");
+  const baseDir = SETTING_DIR;
 
   // Use explicitly configured project identifier if available
   let resolvedProjectPath = projectPath;
@@ -240,9 +237,9 @@ export function resolveMemoryPaths(projectPath: string = ""): {
         `[Memory] Using simplified project identifier: ${resolvedProjectPath}`,
         "system",
       );
-    } else if (cwd.startsWith(homeDir)) {
+    } else if (cwd.startsWith(HOME_DIR)) {
       // Get the path relative to home directory, with Projects/ prefix removed if present
-      let relativePath = cwd.substring(homeDir.length).replace(/^\/+/, "");
+      let relativePath = cwd.substring(HOME_DIR.length).replace(/^\/+/, "");
 
       // If the path includes 'Projects' or 'projects', extract everything after that
       const projectsMatch = relativePath.match(/^(?:Projects|projects)\/(.+)$/);
@@ -271,7 +268,6 @@ export function resolveMemoryPaths(projectPath: string = ""): {
   });
 
   return {
-    homeDir,
     baseDir,
     resolvedProjectPath,
     projectMemoryDir,

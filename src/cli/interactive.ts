@@ -2,17 +2,23 @@ import chalk from "chalk";
 import { createInterface } from "readline/promises";
 import path from "path";
 import fs from "fs/promises";
-import { type CoreMessage, streamText } from "ai";
+import {
+  type CoreMessage,
+  streamText,
+  experimental_createMCPClient as createMCPClient,
+  type ToolSet,
+} from "ai";
 import { systemPrompt } from "../prompts/system-prompt.js";
 import { getTools, setProjectIdentifier } from "../tools/index.js";
 import { openai } from "@ai-sdk/openai";
 import { getProjectContext, getMemoryFilesContext } from "../utils/codebase.js";
-import { markdownToTerminal } from "../utils/index.js";
+import { log, markdownToTerminal } from "../utils/index.js";
+import { getSettings } from "../utils/settings.js";
 
 export async function interactive(projectPath: string = process.cwd()) {
   console.log(
     chalk.bold.blue("Clara") +
-      chalk.blue(" - Your AI Assistant for code clarity"),
+    chalk.blue(" - Your AI Assistant for code clarity"),
   );
   console.log(chalk.gray('Type "exit" or press Ctrl+C to quit\n'));
 
@@ -20,16 +26,32 @@ export async function interactive(projectPath: string = process.cwd()) {
     input: process.stdin,
     output: process.stdout,
   });
-  
+
   // Share the readline interface via session state
   setProjectIdentifier(process.cwd());
-  const sessionState = await import("../utils/sessionState.js").then(module => module.getSessionState());
+  const sessionState = await import("../utils/sessionState.js").then((module) =>
+    module.getSessionState(),
+  );
   sessionState.setSharedReadline(rl);
 
   // Handle Ctrl+C gracefully
-  process.on("SIGINT", () => {
+  process.on("SIGINT", async () => {
     console.log(chalk.blue("\nClara: ") + "Goodbye! Have a great day!");
     rl.close();
+    
+    // Close all MCP clients if they exist in the broader scope
+    if (typeof mcpClients !== 'undefined' && mcpClients.length > 0) {
+      log("Closing MCP clients...");
+      await Promise.allSettled(mcpClients.map(async (client) => {
+        try {
+          await client.close();
+        } catch (error) {
+          log(`Error closing MCP client: ${error}`, "error");
+        }
+      }));
+      log("All MCP clients closed", "success");
+    }
+    
     process.exit(0);
   });
 
@@ -82,6 +104,29 @@ export async function interactive(projectPath: string = process.cwd()) {
       console.log(chalk.gray(`Staying in current directory: ${originalDir}`));
     }
 
+    const settings = await getSettings();
+
+    const mcpTools = [];
+    const mcpClients = [];
+    
+    for (const [key, transport] of Object.entries(settings.mcpServers)) {
+      log(`Creating MCP client for ${key}`);
+      try {
+        const mcpClient = await createMCPClient({
+          transport,
+        });
+        mcpClients.push(mcpClient);
+        
+        const tool = await mcpClient.tools();
+        mcpTools.push(tool);
+        log(`MCP client created for ${key}`, "success");
+      } catch (error) {
+        log(`Failed to create MCP client for ${key}: ${error}`, "error");
+      }
+    }
+    
+    log(`${mcpTools.length} MCP tools created`, "success");
+
     const messages: CoreMessage[] = [
       { role: "system", content: systemPrompt },
       await getProjectContext(),
@@ -122,15 +167,21 @@ export async function interactive(projectPath: string = process.cwd()) {
           model: openai("o3-mini"),
           messages,
           providerOptions: {
-            openai: { reasoningEffot: "low" },
+            openai: { reasoningEffort: "low" },
           },
-          tools,
+          tools: {
+            ...tools,
+            ...Object.fromEntries(mcpTools.flatMap(toolSet => 
+              Object.entries(toolSet)
+            )),
+          },
           maxSteps: 50,
           maxTokens: 15000,
         });
 
         let fullText = "";
 
+        process.stdout.write("\n");
         for await (const chunk of stream.textStream) {
           const formattedChunk = markdownToTerminal(chunk);
           process.stdout.write(formattedChunk);
@@ -159,6 +210,20 @@ export async function interactive(projectPath: string = process.cwd()) {
   } catch (error) {
     console.error(chalk.red("Error:"), error);
   } finally {
+    // Close the readline interface
     rl.close();
+    
+    // Close all MCP clients if they exist
+    if (typeof mcpClients !== 'undefined' && mcpClients.length > 0) {
+      log("Closing MCP clients...");
+      await Promise.allSettled(mcpClients.map(async (client) => {
+        try {
+          await client.close();
+        } catch (error) {
+          log(`Error closing MCP client: ${error}`, "error");
+        }
+      }));
+      log("All MCP clients closed", "success");
+    }
   }
 }

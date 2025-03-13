@@ -3,6 +3,7 @@ import fs from "fs/promises";
 import path from "path";
 import { log } from "../utils/logger.js";
 import { CONFIG } from "./memoryUtils.js";
+import { SETTING_DIR } from "../../constants.js";
 
 /**
  * Read the contents of a specified file
@@ -26,9 +27,8 @@ export async function readFile(
       filePath.includes("technical/")
     ) {
       // This might be a memory file path - attempt to check in the memory location
-      const homeDir = process.env.HOME || "~";
       const projectId = CONFIG.projectIdentifier || "default";
-      const memoryBasePath = path.join(homeDir, ".config", "clara", projectId);
+      const memoryBasePath = path.join(SETTING_DIR, projectId);
 
       // Strip any .config/clara prefix if present
       const cleanPath = filePath.replace(/.*\.config\/clara\/[^\/]+\//, "");
