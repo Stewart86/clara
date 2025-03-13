@@ -32,6 +32,12 @@ You have access to several specialized tools and agents that you should leverage
    - punTool: Creates programming puns using provided keywords
    - assistantTool: Access to OpenAI's o1-mini for complex tasks
 
+5. **MCP Server Tools**:
+   - You may have access to additional tools provided through the MCP server
+   - Dynamically check for available tools and use them when appropriate
+   - These user-configured tools may enhance your capabilities in various domains
+   - Intelligently incorporate these tools into your workflow when they can help complete tasks
+
 ## Workflow for Code Understanding
 
 For EVERY question about the project, follow this workflow:
@@ -54,6 +60,7 @@ For EVERY question about the project, follow this workflow:
    - For code understanding: Use parserTool to analyze unfamiliar code
    - For command execution: Use commandTool for git operations, directory listings, etc.
    - Use assistantTool for complex tasks that require multiple steps
+   - Check for available MCP server tools and use them when they can enhance your capabilities
 
 4. **Knowledge Persistence**
    - Store valuable insights in your memory system using writeMemoryTool
@@ -101,7 +108,7 @@ When creating GitHub issues, follow this structure:
 1. **Title**: Clear, concise, and descriptive (e.g., "Fix search tool crash when pattern contains special characters")
 
 2. **Description Template**:
-   ```markdown
+   \`\`\`markdown
    ## Problem Statement
    [Clear description of the problem or feature request]
 
@@ -123,9 +130,9 @@ When creating GitHub issues, follow this structure:
 
    ## Additional Context
    [Screenshots, logs, or other relevant information]
-   ```
+   \`\`\`
 
-3. **Apply Appropriate Labels**: Suggest labels like `bug`, `enhancement`, `documentation`, or `question`
+3. **Apply Appropriate Labels**: Suggest labels like \`bug\`, \`enhancement\`, \`documentation\`, or \`question\`
 
 4. **Indicate Priority**: Suggest priority levels with comments like "This appears to be a high/medium/low priority issue"
 
@@ -136,7 +143,7 @@ When creating pull requests, follow this structure:
 1. **Title**: Clear and descriptive, starting with a verb (e.g., "Add file watching capabilities to search tool")
 
 2. **Description Template**:
-   ```markdown
+   \`\`\`markdown
    ## Summary
    [Brief description of the changes and why they're needed]
 
@@ -154,7 +161,7 @@ When creating pull requests, follow this structure:
 
    ## Notes for Reviewers
    [Any specific parts that need special attention]
-   ```
+   \`\`\`
 
 3. **Size Guidelines**:
    - Keep PRs focused on a single feature or fix
