@@ -2,6 +2,7 @@ import chalk from "chalk";
 import { createInterface } from "readline/promises";
 import path from "path";
 import fs from "fs/promises";
+import ora from "ora";
 import {
   type CoreMessage,
   streamText,
@@ -33,6 +34,9 @@ export async function interactive(projectPath: string = process.cwd()) {
   );
   sessionState.setSharedReadline(rl);
 
+  // Define mcpClients at the outer scope so it's accessible in the finally block
+  let mcpClients: any[] = [];
+
   // Handle Ctrl+C gracefully
   process.on("SIGINT", async () => {
     console.log(chalk.blue("\nClara: ") + "Goodbye! Have a great day!");
@@ -55,9 +59,6 @@ export async function interactive(projectPath: string = process.cwd()) {
 
     process.exit(0);
   });
-
-  // Define mcpClients at the outer scope so it's accessible in the finally block
-  let mcpClients: any[] = [];
 
   try {
     let running = true;
@@ -138,6 +139,14 @@ export async function interactive(projectPath: string = process.cwd()) {
 
     const tools = getTools();
 
+    // Spinner text options for a more dynamic experience
+    const spinnerTexts = [
+      "Analyzing your request...",
+      "Searching codebase...",
+      "Processing information...",
+      "Generating response...",
+    ];
+
     while (running) {
       try {
         const prompt = await rl.question(chalk.green("You: "));
@@ -148,22 +157,11 @@ export async function interactive(projectPath: string = process.cwd()) {
           break;
         }
 
-        // Print "Thinking..." message
-        const thinkingMessage = `${chalk.blue("Clara: ")}Thinking...`;
-        process.stdout.write(thinkingMessage);
-
-        // Clear space for tool usage messages (which will appear below)
-        console.log();
-
-        // Clear the "Thinking..." message before response starts
-        setTimeout(() => {
-          // Move cursor up one line and clear to the beginning of the line
-          process.stdout.write("\x1B[1A\x1B[K");
-          process.stdout.write(chalk.blue("Clara: "));
-        }, 500);
-
         // Add user message to conversation history
         messages.push({ role: "user", content: prompt });
+
+        // Simple "Thinking..." message
+        console.log(chalk.blue("Clara: ") + "Thinking...");
 
         // Process the prompt and get streaming response
         const stream = streamText({
@@ -183,9 +181,16 @@ export async function interactive(projectPath: string = process.cwd()) {
         });
 
         let fullText = "";
+        let isFirstChunk = true;
 
-        process.stdout.write("\n");
         for await (const chunk of stream.textStream) {
+          if (isFirstChunk) {
+            // Clear line and write prefix
+            process.stdout.write("\r" + " ".repeat(50) + "\r");  // Clear the line
+            process.stdout.write(chalk.blue("Clara: "));
+            isFirstChunk = false;
+          }
+
           const formattedChunk = markdownToTerminal(chunk);
           process.stdout.write(formattedChunk);
           fullText += chunk; // Store the original text in the conversation history
@@ -196,6 +201,7 @@ export async function interactive(projectPath: string = process.cwd()) {
           content: fullText,
         });
 
+        // Add an extra line break after each response for readability
         console.log("\n");
       } catch (error) {
         const inputError = error as unknown as {
