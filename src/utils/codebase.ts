@@ -2,8 +2,6 @@ import type { CoreMessage } from "ai";
 import { $ } from "bun";
 import { readFile, readdir } from "fs/promises";
 import path from "path";
-import os from "os";
-import { log } from "./logger.js";
 
 /**
  * Gets context about Clara's memory files for the current project
@@ -68,6 +66,8 @@ export async function getMemoryFilesContext(): Promise<CoreMessage> {
       memoryFiles.forEach((file) => {
         context += `- ${file}\n`;
       });
+
+      context += `Today's local datetime is ${new Date().toLocaleString()}\n`;
 
       context +=
         "\nI'll start my investigation using these memory files to understand the project better.\n" +

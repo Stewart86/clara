@@ -33,12 +33,14 @@ Clara runs entirely via a command line interface. It can be used interactively o
 #### Recommended Modern CLI Tools
 
 - **File Operations**:
+
   - [fd](https://github.com/sharkdp/fd) - Modern alternative to `find` for improved search
   - [ripgrep](https://github.com/BurntSushi/ripgrep) - Fast code search tool
   - [bat](https://github.com/sharkdp/bat) - A `cat` clone with syntax highlighting
   - [exa/eza](https://github.com/eza-community/eza) - Modern replacement for `ls`
 
 - **Data Processing**:
+
   - [jq](https://stedolan.github.io/jq/) - Command-line JSON processor
   - [yq](https://github.com/mikefarah/yq) - YAML processor
 
@@ -64,6 +66,7 @@ cd clara
 ```
 
 The script will:
+
 1. Install dependencies
 2. Build the application
 3. Install Clara to ~/.local/bin
@@ -122,6 +125,7 @@ clara analyze --directory ./my-project --model gpt-4o --focus business
 ```
 
 Options:
+
 - `--directory, -d`: Path to the codebase directory (required)
 - `--model, -m`: AI model to use (default: gpt-4o-mini)
 - `--focus, -f`: Analysis focus (technical, business, all)
@@ -137,6 +141,7 @@ clara explain path/to/file.js --audience non-technical
 ```
 
 Options:
+
 - `--audience, -a`: Target audience (technical, non-technical, all)
 - `--model, -m`: AI model to use (default: gpt-4o-mini)
 - `--format, -f`: Output format (terminal, markdown, json)
@@ -246,6 +251,7 @@ The system uses standard input for interactive confirmation dialogs.
 Clara's security system supports both traditional Unix commands and modern alternatives:
 
 **Safe Tools** (run without confirmation):
+
 - **File Listing**: `ls`, `exa`, `lsd`
 - **File Search**: `find`, `fd`
 - **Content Search**: `grep`, `rg` (ripgrep)
@@ -254,14 +260,16 @@ Clara's security system supports both traditional Unix commands and modern alter
 - **Disk Usage**: `du`, `df`, `dust`, `duf`
 
 **Caution Tools** (require confirmation):
+
 - **JavaScript Runtimes**: `node`, `deno`, `bun` (non-install commands)
 - **Package Managers**: `npm`, `yarn`, `pnpm` (non-install commands)
 - **Build Tools**: `cargo`, `go` (non-install commands)
 
 **Dangerous Tools** (high scrutiny, may be rejected):
+
 - **System Modification**: `sudo`, `chmod`, `chown`
 - **Package Installation**: `npm install`, `bun add`, `deno install`
-- **Network Tools**: `curl`, `wget` 
+- **Network Tools**: `curl`, `wget`
 - **Container Tools**: `docker`, `podman`, `nerdctl`
 
 ##### Testing the Command Security System
@@ -296,18 +304,6 @@ Clara is designed to be extensible with custom agents and tools:
 - **API Key Issues**: Ensure your API keys are correctly set in `.env`
 - **Permission Errors**: Check CLI executable permissions with `chmod +x src/cli/index.ts`
 - **Memory Access**: Verify the `~/.config/clara/` directory exists and is writable
-
-### Debug Mode
-
-Clara has two ways to enable debug logging:
-
-1. **Development Mode**: When running with `bun dev` or directly from source files, system logs are automatically shown
-
-2. **Production Mode**: When running the compiled binary, use the DEBUG environment variable:
-
-```bash
-DEBUG=true clara interactive
-```
 
 Debug logs show detailed system information including search operations, file access, and tool execution.
 

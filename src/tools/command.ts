@@ -555,20 +555,6 @@ function hasShellInjectionPattern(command: string): boolean {
 }
 
 /**
- * Checks if gum is installed and available
- * @returns Whether gum is available
- */
-async function isGumAvailable(): Promise<boolean> {
-  $.throws(true);
-  try {
-    await $`which gum`.quiet();
-    return true;
-  } catch (e) {
-    return false;
-  }
-}
-
-/**
  * Ask user confirmation using the shared readline interface if available
  * @param command Command that needs confirmation
  * @param riskLevel Risk level of the command
@@ -590,49 +576,51 @@ async function askUserConfirmation(
   // Get the session state to check for shared readline
   const sessionState = getSessionState();
   const sharedReadline = sessionState.getSharedReadline();
-  
+
   // If we have a shared readline interface, use it
   if (sharedReadline !== null) {
     // Pause the main readline interface temporarily to avoid duplicate inputs
-    const wasListening = !sharedReadline.paused;
+    const wasListening = !sharedReadline.pause;
     if (wasListening) {
       sharedReadline.pause();
     }
-    
+
     // Create a simple question function using the shared readline
     const ask = (prompt: string): Promise<string> => {
       return new Promise((resolve) => {
         process.stdout.write(prompt);
-        
+
         const onLine = (line: string) => {
           // Clean up listener and resolve with answer
-          sharedReadline.removeListener('line', onLine);
+          sharedReadline.removeListener("line", onLine);
           resolve(line.trim());
         };
-        
+
         // Listen just for this one line
-        sharedReadline.once('line', onLine);
-        
+        sharedReadline.once("line", onLine);
+
         // Resume to get input
         sharedReadline.resume();
       });
     };
-    
+
     try {
       // Ask for command approval
       const answer = await ask("Approve this command? (y/n): ");
-      const approved = 
+      const approved =
         answer.toLowerCase() === "y" || answer.toLowerCase() === "yes";
-      
+
       // If approved, ask about remembering the choice
       let rememberChoice = false;
       if (approved) {
-        const rememberAnswer = await ask("Remember this choice for the rest of the session? (y/n): ");
+        const rememberAnswer = await ask(
+          "Remember this choice for the rest of the session? (y/n): ",
+        );
         rememberChoice =
           rememberAnswer.toLowerCase() === "y" ||
           rememberAnswer.toLowerCase() === "yes";
       }
-      
+
       return { approved, rememberChoice };
     } finally {
       // Restore previous readline state
@@ -645,18 +633,20 @@ async function askUserConfirmation(
     // This should only happen when running command tests directly
     console.log("No shared readline available, using fallback prompt.");
     const answer = prompt("Approve this command? (y/n): ") || "n";
-    const approved = 
+    const approved =
       answer.toLowerCase() === "y" || answer.toLowerCase() === "yes";
-    
+
     // If approved, ask about remembering the choice
     let rememberChoice = false;
     if (approved) {
-      const rememberAnswer = prompt("Remember this choice for the rest of the session? (y/n): ") || "n";
+      const rememberAnswer =
+        prompt("Remember this choice for the rest of the session? (y/n): ") ||
+        "n";
       rememberChoice =
         rememberAnswer.toLowerCase() === "y" ||
         rememberAnswer.toLowerCase() === "yes";
     }
-    
+
     return { approved, rememberChoice };
   }
 }
