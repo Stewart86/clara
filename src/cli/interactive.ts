@@ -6,7 +6,6 @@ import {
   type CoreMessage,
   streamText,
   experimental_createMCPClient as createMCPClient,
-  type ToolSet,
 } from "ai";
 import { systemPrompt } from "../prompts/system-prompt.js";
 import { getTools, setProjectIdentifier } from "../tools/index.js";
@@ -18,7 +17,7 @@ import { getSettings } from "../utils/settings.js";
 export async function interactive(projectPath: string = process.cwd()) {
   console.log(
     chalk.bold.blue("Clara") +
-    chalk.blue(" - Your AI Assistant for code clarity"),
+      chalk.blue(" - Your AI Assistant for code clarity"),
   );
   console.log(chalk.gray('Type "exit" or press Ctrl+C to quit\n'));
 
@@ -38,22 +37,27 @@ export async function interactive(projectPath: string = process.cwd()) {
   process.on("SIGINT", async () => {
     console.log(chalk.blue("\nClara: ") + "Goodbye! Have a great day!");
     rl.close();
-    
-    // Close all MCP clients if they exist in the broader scope
-    if (typeof mcpClients !== 'undefined' && mcpClients.length > 0) {
+
+    // Close all MCP clients if they exist
+    if (mcpClients.length > 0) {
       log("Closing MCP clients...");
-      await Promise.allSettled(mcpClients.map(async (client) => {
-        try {
-          await client.close();
-        } catch (error) {
-          log(`Error closing MCP client: ${error}`, "error");
-        }
-      }));
+      await Promise.allSettled(
+        mcpClients.map(async (client) => {
+          try {
+            await client.close();
+          } catch (error) {
+            log(`Error closing MCP client: ${error}`, "error");
+          }
+        }),
+      );
       log("All MCP clients closed", "success");
     }
-    
+
     process.exit(0);
   });
+
+  // Define mcpClients at the outer scope so it's accessible in the finally block
+  let mcpClients: any[] = [];
 
   try {
     let running = true;
@@ -107,8 +111,7 @@ export async function interactive(projectPath: string = process.cwd()) {
     const settings = await getSettings();
 
     const mcpTools = [];
-    const mcpClients = [];
-    
+
     for (const [key, transport] of Object.entries(settings.mcpServers)) {
       log(`Creating MCP client for ${key}`);
       try {
@@ -116,7 +119,7 @@ export async function interactive(projectPath: string = process.cwd()) {
           transport,
         });
         mcpClients.push(mcpClient);
-        
+
         const tool = await mcpClient.tools();
         mcpTools.push(tool);
         log(`MCP client created for ${key}`, "success");
@@ -124,7 +127,7 @@ export async function interactive(projectPath: string = process.cwd()) {
         log(`Failed to create MCP client for ${key}: ${error}`, "error");
       }
     }
-    
+
     log(`${mcpTools.length} MCP tools created`, "success");
 
     const messages: CoreMessage[] = [
@@ -171,9 +174,9 @@ export async function interactive(projectPath: string = process.cwd()) {
           },
           tools: {
             ...tools,
-            ...Object.fromEntries(mcpTools.flatMap(toolSet => 
-              Object.entries(toolSet)
-            )),
+            ...Object.fromEntries(
+              mcpTools.flatMap((toolSet) => Object.entries(toolSet)),
+            ),
           },
           maxSteps: 50,
           maxTokens: 15000,
@@ -212,17 +215,19 @@ export async function interactive(projectPath: string = process.cwd()) {
   } finally {
     // Close the readline interface
     rl.close();
-    
+
     // Close all MCP clients if they exist
-    if (typeof mcpClients !== 'undefined' && mcpClients.length > 0) {
+    if (mcpClients.length > 0) {
       log("Closing MCP clients...");
-      await Promise.allSettled(mcpClients.map(async (client) => {
-        try {
-          await client.close();
-        } catch (error) {
-          log(`Error closing MCP client: ${error}`, "error");
-        }
-      }));
+      await Promise.allSettled(
+        mcpClients.map(async (client) => {
+          try {
+            await client.close();
+          } catch (error) {
+            log(`Error closing MCP client: ${error}`, "error");
+          }
+        }),
+      );
       log("All MCP clients closed", "success");
     }
   }
