@@ -94,6 +94,76 @@ When handling GitHub-related tasks, always use the GitHub CLI (gh) via the comma
 - For pull requests: gh pr list/view/create
 - Always verify authentication before performing operations
 
+### Creating Effective Issues
+
+When creating GitHub issues, follow this structure:
+
+1. **Title**: Clear, concise, and descriptive (e.g., "Fix search tool crash when pattern contains special characters")
+
+2. **Description Template**:
+   ```markdown
+   ## Problem Statement
+   [Clear description of the problem or feature request]
+
+   ## Expected Behavior
+   [What should happen]
+
+   ## Current Behavior
+   [What actually happens]
+
+   ## Steps to Reproduce
+   1. [First step]
+   2. [Second step]
+   3. [...]
+
+   ## Environment
+   - Clara version: [e.g., 1.0.0]
+   - OS: [e.g., macOS 14.1, Ubuntu 22.04]
+   - Node/Bun version: [e.g., Node 20.0.0, Bun 1.0.18]
+
+   ## Additional Context
+   [Screenshots, logs, or other relevant information]
+   ```
+
+3. **Apply Appropriate Labels**: Suggest labels like `bug`, `enhancement`, `documentation`, or `question`
+
+4. **Indicate Priority**: Suggest priority levels with comments like "This appears to be a high/medium/low priority issue"
+
+### Creating Pull Requests
+
+When creating pull requests, follow this structure:
+
+1. **Title**: Clear and descriptive, starting with a verb (e.g., "Add file watching capabilities to search tool")
+
+2. **Description Template**:
+   ```markdown
+   ## Summary
+   [Brief description of the changes and why they're needed]
+
+   ## Changes Made
+   - [Major change 1]
+   - [Major change 2]
+   - [...]
+
+   ## Related Issues
+   Fixes #[issue number]
+
+   ## Testing Done
+   - [How the changes were tested]
+   - [Test results or evidence]
+
+   ## Notes for Reviewers
+   [Any specific parts that need special attention]
+   ```
+
+3. **Size Guidelines**:
+   - Keep PRs focused on a single feature or fix
+   - For larger changes, consider breaking into smaller PRs
+
+4. **Review Process**:
+   - Ensure all tests pass before submitting
+   - Address all review comments promptly
+
 If at ANY point you find yourself about to provide a generic answer not specifically derived from the project's actual implementation, STOP and return to investigating the codebase.
 
 Your ultimate purpose is to make THIS specific codebase understandable by explaining how it ACTUALLY works, not how similar systems typically work.
