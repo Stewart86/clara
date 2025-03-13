@@ -14,6 +14,7 @@ import { openai } from "@ai-sdk/openai";
 import { getProjectContext, getMemoryFilesContext } from "../utils/codebase.js";
 import { log, markdownToTerminal } from "../utils/index.js";
 import { getSettings } from "../utils/settings.js";
+import boxen from "boxen";
 
 export async function interactive(projectPath: string = process.cwd()) {
   console.log(
@@ -36,6 +37,7 @@ export async function interactive(projectPath: string = process.cwd()) {
 
   // Define mcpClients at the outer scope so it's accessible in the finally block
   let mcpClients: any[] = [];
+  const terminalWidth = process.stdout.columns || 80;
 
   // Handle Ctrl+C gracefully
   process.on("SIGINT", async () => {
@@ -149,19 +151,55 @@ export async function interactive(projectPath: string = process.cwd()) {
 
     while (running) {
       try {
-        const prompt = await rl.question(chalk.green("You: "));
+        // Get input from user
+        const prompt = await rl.question(chalk.green(" > "));
+
+        // Skip displaying empty prompts
+        if (prompt.trim()) {
+          // Display the user message in a box on the right
+          const terminalWidth = process.stdout.columns || 80;
+          const boxWidth = Math.min(Math.floor(terminalWidth * 0.7), 80);
+
+          const userBoxOptions = {
+            padding: 1,
+            margin: { top: 1, bottom: 1, left: 10, right: 1 },
+            borderStyle: "round",
+            borderColor: "green",
+            title: chalk.green("You"),
+            width: boxWidth,
+            float: "right",
+            textAlignment: "right",
+          };
+
+          // Clear the input line and display the boxed message
+          process.stdout.write("\r" + " ".repeat(terminalWidth) + "\r");
+          console.log(boxen(prompt, userBoxOptions));
+        }
 
         if (prompt.toLowerCase() === "exit") {
-          console.log(chalk.blue("Clara: ") + "Goodbye! Have a great day!");
+          const boxWidth = Math.min(Math.floor(terminalWidth * 0.7), 80);
+
+          const goodbyeBoxOptions = {
+            padding: 1,
+            margin: { top: 1, bottom: 1, left: 1, right: 10 },
+            borderStyle: "round",
+            borderColor: "blue",
+            title: chalk.blue("Clara"),
+            width: boxWidth,
+            float: "left",
+          };
+
+          console.log(
+            boxen("Goodbye! Have a great day! 👋", goodbyeBoxOptions),
+          );
+          console.log(); // Add extra space
+
           running = false;
           break;
         }
 
         // Add user message to conversation history
         messages.push({ role: "user", content: prompt });
-
-        // Simple "Thinking..." message
-        console.log(chalk.blue("Clara: ") + "Thinking...");
 
         // Process the prompt and get streaming response
         const stream = streamText({
@@ -181,28 +219,45 @@ export async function interactive(projectPath: string = process.cwd()) {
         });
 
         let fullText = "";
-        let isFirstChunk = true;
 
+        // Instead of streaming the text directly, collect it first
+        let streamingText = "";
+
+        // Collect the full text from the stream
         for await (const chunk of stream.textStream) {
-          if (isFirstChunk) {
-            // Clear line and write prefix
-            process.stdout.write("\r" + " ".repeat(50) + "\r");  // Clear the line
-            process.stdout.write(chalk.blue("Clara: "));
-            isFirstChunk = false;
-          }
-
-          const formattedChunk = markdownToTerminal(chunk);
-          process.stdout.write(formattedChunk);
-          fullText += chunk; // Store the original text in the conversation history
+          fullText += chunk;
+          streamingText += chunk;
         }
+
+        // Clear the temporary message
+        process.stdout.write("\r" + " ".repeat(50) + "\r");
+
+        // Format the text with markdown conversion
+        const formattedText = markdownToTerminal(streamingText);
+
+        // Display the response in a box on the left
+        // Reuse the same terminalWidth variable
+        const boxWidth = Math.min(Math.floor(terminalWidth * 0.7), 80);
+
+        const claraBoxOptions = {
+          padding: 1,
+          margin: { top: 1, bottom: 1, left: 1, right: 10 },
+          borderStyle: "round",
+          borderColor: "blue",
+          title: chalk.blue("Clara"),
+          width: boxWidth,
+          float: "left",
+        };
+
+        console.log(boxen(formattedText, claraBoxOptions));
 
         messages.push({
           role: "assistant",
           content: fullText,
         });
 
-        // Add an extra line break after each response for readability
-        console.log("\n");
+        // Add extra space after response
+        console.log();
       } catch (error) {
         const inputError = error as unknown as {
           code: string;

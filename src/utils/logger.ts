@@ -12,7 +12,9 @@ type LogType = "system" | "info" | "warning" | "error" | "success";
  */
 export function log(message: string, type: LogType = "info"): void {
   if (type === "system") {
-    process.stdout.write(`\r${chalk.gray(message)}`);
+    process.stdout.clearLine(0);
+    process.stdout.cursorTo(0);
+    process.stdout.write(`${chalk.gray(message)}`);
     return;
   }
 
