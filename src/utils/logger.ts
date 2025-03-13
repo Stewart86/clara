@@ -9,17 +9,28 @@ type LogType = "system" | "info" | "warning" | "error" | "success";
  * - In production: Only show if DEBUG=true
  */
 function shouldShowDebugLogs(): boolean {
-  // Check if we're running in development mode or debug is enabled
-  const isDevelopment = process.env.NODE_ENV === "development" || 
-                        // Also consider development if we're running with bun directly
-                        process.argv[0].includes("bun") ||
-                        // Check if we're running the source .ts files directly
-                        process.argv[1]?.endsWith(".ts");
+  // Check if DEBUG environment variable is explicitly set to true
+  if (process.env.DEBUG === "true") {
+    return true;
+  }
+
+  // Detect production mode
+  const isProduction = process.env.NODE_ENV === "production";
+  if (isProduction) {
+    return false;
+  }
+
+  // For built/compiled Clara binary check - the binary won't have .ts extension
+  const isCompiledBinary = !process.argv[0].includes("bun") && 
+                         !process.argv[1]?.endsWith(".ts");
   
-  // Check if DEBUG environment variable is set
-  const isDebugEnabled = process.env.DEBUG === "true";
+  // If it looks like we're running a compiled binary and DEBUG is not set
+  if (isCompiledBinary && process.env.DEBUG !== "true") {
+    return false;
+  }
   
-  return isDevelopment || isDebugEnabled;
+  // Otherwise, assume we're in development mode
+  return true;
 }
 
 /**
@@ -31,15 +42,14 @@ function shouldShowDebugLogs(): boolean {
  * @param type The type of log (system, info, warning, error, success)
  */
 export function log(message: string, type: LogType = "info"): void {
-  // Skip system logs unless in debug mode
-  if (type === "system" && !shouldShowDebugLogs()) {
-    return;
-  }
-
-  // Check if this is a system log (contains tags like [SEARCH], [READ])
-  const isSystemLog = /\[\w+\]/.test(message);
-
-  if (isSystemLog && type === "system") {
+  // For system logs, only show them if debug is enabled
+  if (type === "system") {
+    // Skip system logs unless in debug mode
+    if (!shouldShowDebugLogs()) {
+      return;
+    }
+    
+    // Format and show system log
     process.stdout.write(`\r${chalk.gray(message)}\n`);
     return;
   }
