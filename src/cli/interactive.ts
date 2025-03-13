@@ -2,7 +2,6 @@ import chalk from "chalk";
 import { createInterface } from "readline/promises";
 import path from "path";
 import fs from "fs/promises";
-import ora from "ora";
 import {
   type CoreMessage,
   streamText,
@@ -171,8 +170,9 @@ export async function interactive(projectPath: string = process.cwd()) {
             textAlignment: "right",
           };
 
-          // Clear the input line and display the boxed message
-          process.stdout.write("\r" + " ".repeat(terminalWidth) + "\r");
+          // Just display the boxed message without trying to clear the line
+          process.stdout.moveCursor(0, -1);
+          process.stdout.clearLine(1);
           console.log(boxen(prompt, userBoxOptions));
         }
 
