@@ -21,7 +21,7 @@ if [ -f "$SCRIPT_DIR/package.json" ]; then
     cd "$SCRIPT_DIR"
 else
     echo "🔄 Cloning Clara repository..."
-    git clone https://github.com/yourusername/clara.git
+    git clone https://github.com/Stewart86/clara.git
     cd clara
 fi
 

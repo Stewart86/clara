@@ -13,7 +13,7 @@ An AI Assistant that provides clarity to your business codebase.
 
 Clara is an agentic AI assistant designed to simplify the complexity of codebases. Targeting both technical and business stakeholders, Clara leverages a suite of integrated tools to thoroughly investigate and understand code from start to finish.
 
-Clara runs entirely using a command line interface. It can be used interactively or via the CLI with additional parameters for different configurations.
+Clara runs entirely via a command line interface. It can be used interactively or with CLI parameters for different analysis configurations.
 
 ## Features
 
@@ -29,8 +29,6 @@ Clara runs entirely using a command line interface. It can be used interactively
 - API keys for supported AI models (OpenAI, Anthropic, etc.)
 
 ### Optional Dependencies
-
-- [Gum](https://github.com/charmbracelet/gum) - For enhanced interactive command approval dialogs
 
 #### Recommended Modern CLI Tools
 
@@ -52,20 +50,43 @@ Clara's command security system has built-in support for all these tools.
 
 ## Installation
 
-### From Source
+### Using the Install Script
+
+The easiest way to install Clara is using the provided installation script:
 
 ```bash
 # Clone the repository
-git clone https://github.com/yourusername/clara.git
+git clone https://github.com/Stewart86/clara.git
+cd clara
+
+# Run the installation script
+./install.sh
+```
+
+The script will:
+1. Install dependencies
+2. Build the application
+3. Install Clara to ~/.local/bin
+4. Create the necessary config directory
+
+### Manual Installation
+
+```bash
+# Clone the repository
+git clone https://github.com/Stewart86/clara.git
 cd clara
 
 # Install dependencies
 bun install
 
-# Make the CLI executable
-chmod +x src/cli/index.ts
+# Build the application
+bun build
 
-# Create symlink to use 'clara' command globally
+# Make the CLI executable and run it directly
+chmod +x src/cli/index.ts
+./src/cli/index.ts --help
+
+# Or create a symlink to use 'clara' command globally
 bun link
 ```
 
@@ -132,18 +153,36 @@ Commands:
 
 ## Development
 
+### Development Commands
+
 ```bash
 # Run in development mode with auto-reload
 bun dev
 
-# Run tests
+# Build for production (outputs to dist directory)
+bun build
+
+# Run Clara directly during development
+bun clara
+```
+
+### Testing
+
+```bash
+# Run all tests
 bun test
 
 # Run specific test file
 bun test src/tests/basic.test.ts
 
-# Build for production
-bun build
+# Run security-specific tests
+bun test:security
+
+# Test command security with manual interaction
+bun test:manual
+
+# Run security penetration tests
+bun test:pentest
 ```
 
 ## Memory System
@@ -200,7 +239,7 @@ Clara's command execution system implements a multi-tiered security approach:
 - **Session Memory**: Option to remember approvals for the duration of a session
 - **Hard Rejections**: Immediately blocks commands that could cause system damage
 
-The system uses [Gum](https://github.com/charmbracelet/gum) for interactive confirmation dialogs when available, with a fallback to standard input.
+The system uses standard input for interactive confirmation dialogs.
 
 ##### Modern CLI Tool Support
 
@@ -240,7 +279,7 @@ bun test:manual
 bun test:pentest
 ```
 
-The penetration test script (`test:pentest`) tries to find ways to bypass the security system by generating permutations of dangerous commands with various obfuscation techniques. It produces a detailed report showing which commands were blocked and any potential security bypasses discovered.
+The penetration test script (`test:pentest`) attempts to bypass the security system by generating permutations of dangerous commands with various obfuscation techniques. It produces a detailed report showing which commands were blocked and any potential vulnerabilities discovered.
 
 ## Extending Clara
 
