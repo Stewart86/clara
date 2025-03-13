@@ -1,39 +1,23 @@
 import { log } from "../utils/logger";
 import { openai } from "@ai-sdk/openai";
-import { getTools } from "../tools";
-import { generateText, type Tool } from "ai";
+import { generateText, type Tool, tool as aiTool } from "ai";
 import { z } from "zod";
 import { searchFiles } from "../tools/search";
 import type { OpenAIChatModelId } from "@ai-sdk/openai/internal";
 
-/**
- * Search agent powered by OpenAI 4o-mini
- * Specialized in advanced file search using rg and fd commands
- *
- * @param prompt - The detailed search query prompt
- * @returns The search agent's response with found files
- */
-export async function searchAgent(prompt: string): Promise<string> {
-  try {
-    const systemPrompt = `You are a commandline search specialist agent integrated into Clara, designed to find files and code efficiently.
-You are an expert at using terminal search tools like ripgrep (rg) and fd. You should only return a comphensive list of files you have found.
+const systemPrompt = `You are a commandline search specialist agent integrated into Clara, designed to find files and code efficiently. You are well versed in many different programming languages. You understand the folder and file structure of some of the most common programming framework, have a general idea on where to look for things. You are an expert at using terminal search tools like ripgrep (rg) and fd. You should only return a comphensive list of files you have found.
 
 Follow these best practices for file searching:
 1. For content searches:
-   - Use ripgrep with proper flags: rg -l -i "pattern" /path
-   - Use word boundaries for multi-word searches: rg -l -i "\\bword1\\b.*\\bword2\\b" /path
-   - Use pipe for alternative words: rg -l -i "(word1|word2|word3)" /path
-   - Combine techniques: rg -l -i "\\b(login|auth)\\b.*\\b(token|session)\\b" /path
-   - Use case-insensitive flags: -i
-   - Filter by file type: -t js, -t ts, etc.
-   - Include context when needed: -A/-B/-C for lines after/before/around matches
+   - Use rg (ripgrep) compatible patterns: "pattern" excluding the command and flags
+   - Use pipe for alternative words: "(word1|word2|word3)"
+   - Combine techniques: "(login|auth).*(token|session)"
 
 2. For filename searches:
-   - Use fd with appropriate flags: fd -i "pattern" /path
-   - For partial matches: fd -i "partial" /path
-   - For specific extensions: fd -e ts -e js "pattern" /path
+    - Use fd for filename searches: fd "pattern" /path excluding the command and flags
+   - For partial matches: "partial" /path
    - For folder-specific searches: fd "pattern" path/to/folder
-   - Use pipe for multiple patterns: fd -e ts "(auth|login)" /path
+   - Use pipe for multiple patterns: "(auth|login)" /path
    
 3. For glob patterns:
    - Keep patterns simple: "*keyword*" is better than "**/*keyword*"
@@ -47,11 +31,43 @@ Follow these best practices for file searching:
    - Try alternative terms/synonyms in a single search using | operator
    - Use (term1|term2|term3) patterns for multiple terms
    - Split compound words: "savePromotion" → "(save|promotion)"
-   - When a search returns too many results, narrow with additional patterns
-   - When no results are found, simplify the pattern
+   - **IMPORTANT** When a search returns too many results, narrow with additional patterns
+   - When no results are found, simplify the pattern, try different terms or synonyms or tenses
+
+5. Keyword processing:
+   - Always tokenize compound keywords: "fileReader" → "(file|reader)"
+   - For plural forms, search both singular and plural: "files" → "(file|files)"
+   - For different verb tenses, include alternatives: "reading" → "(read|reading|reads)"
+   - Use word stems when possible: "configuration" → "(config|configuration)"
+   - Handle common abbreviations: "auth" → "(auth|authentication|authorize)"
+   - Include both British and American English spellings: "colour" → "(color|colour)", "organize" → "(organize|organise)"
+
+6. File and folders to avoid:
+   - Never search in system directories like /etc, /usr, /bin
+   - Avoid searching in node_modules, .git, or other generated folders
+   - Exclude build, dist, and other output directories
+   - Skip searching in hidden folders like .vscode, .idea, etc.
+
+7. Do search in:
+   - Search in files used specifically for AI memory / knowledge base
+   - files / folders like CLAUDE.md, .cursorrules, or .github/copilot-instructions.md
+   - folders like docs/ might contain useful information
+
+8. Response considerations:
+   - Always include the full path of the file
+   - Ensure the response is comprehensive and accurate
 `;
 
-    const tool: Tool = {
+/**
+ * Search agent powered by OpenAI 4o-mini
+ * Specialized in advanced file search using rg and fd commands
+ *
+ * @param prompt - The detailed search query prompt
+ * @returns The search agent's response with found files
+ */
+export async function searchAgent(prompt: string): Promise<string> {
+  try {
+    const tool: Tool = aiTool({
       description:
         "Search for files in the project using a specialized search agent that can use advanced rg and fd commands. Always use this tool for any file searches.",
       parameters: z.object({
@@ -60,15 +76,16 @@ Follow these best practices for file searching:
           .describe(
             'the pattern to search for, excluding the command. For example: "src/**/*.ts"',
           ),
+        tool: z.enum(["rg", "fd"]).describe("the search tool to use"),
       }),
-      execute: async ({ pattern }) => {
-        return await searchFiles(pattern);
+      execute: async ({ pattern, tool }) => {
+        return await searchFiles(pattern, tool);
       },
-    };
+    });
 
-    const model: OpenAIChatModelId = "o3-mini";
-
+    const model: OpenAIChatModelId = "gpt-4o-mini";
     log(`[SearchAgent] Generating response with ${model}`, "system");
+    log(`[SearchAgent] Clara's Prompt: ${prompt}`, "system");
     const response = await generateText({
       model: openai(model),
       tools: {
@@ -82,7 +99,8 @@ Follow these best practices for file searching:
       ],
     });
 
-    return response.text;
+    const result = response.text.trim();
+    return result;
   } catch (error) {
     log(`[searchAgent] Error: ${error}`, "error");
     return `Sorry, I encountered an error while searching: ${error}`;

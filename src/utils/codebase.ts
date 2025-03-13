@@ -1,5 +1,5 @@
 import type { CoreMessage } from "ai";
-import { spawn } from "bun";
+import { $ } from "bun";
 import { readFile, readdir } from "fs/promises";
 import path from "path";
 import os from "os";
@@ -77,8 +77,6 @@ export async function getMemoryFilesContext(): Promise<CoreMessage> {
 
     context += "</env>";
 
-    log(`Memory files context: ${context}`, "system");
-
     return {
       role: "system",
       content: context,
@@ -100,40 +98,34 @@ export async function getProjectContext() {
     let context = "<env>\n# Project Context\n\n";
 
     // Get current directory
-    const pwdProc = spawn(["pwd"], { stdout: "pipe" });
-    const pwd = await new Response(pwdProc.stdout).text();
-    await pwdProc.exited;
+    const pwdResult = await $`pwd`.quiet();
+    const pwd = pwdResult.text();
     context += `Current directory: ${pwd.trim()}\n\n`;
 
     // Check if this is a git repository
     try {
-      const gitCheckProc = spawn(
-        ["git", "rev-parse", "--is-inside-work-tree"],
-        { stdout: "pipe", stderr: "pipe" },
-      );
-      await gitCheckProc.exited;
-      context += "This is a git repository.\n";
+      const gitCheckResult =
+        await $`git rev-parse --is-inside-work-tree`.quiet();
+      if (gitCheckResult.exitCode === 0) {
+        context += "This is a git repository.\n";
 
-      // Get git remote info
-      try {
-        const remoteProc = spawn(["git", "remote", "-v"], { stdout: "pipe" });
-        const remoteInfo = await new Response(remoteProc.stdout).text();
-        await remoteProc.exited;
-        context += `Git remotes:\n${remoteInfo}\n`;
-      } catch (e) {
-        context += "No git remotes found.\n";
-      }
+        // Get git remote info
+        try {
+          const remoteResult = await $`git remote -v`.quiet();
+          const remoteInfo = remoteResult.text();
+          context += `Git remotes:\n${remoteInfo}\n`;
+        } catch (e) {
+          context += "No git remotes found.\n";
+        }
 
-      // Get current branch
-      try {
-        const branchProc = spawn(["git", "branch", "--show-current"], {
-          stdout: "pipe",
-        });
-        const branchInfo = await new Response(branchProc.stdout).text();
-        await branchProc.exited;
-        context += `Current branch: ${branchInfo.trim()}\n`;
-      } catch (e) {
-        context += "Could not determine current branch.\n";
+        // Get current branch
+        try {
+          const branchResult = await $`git branch --show-current`.quiet();
+          const branchInfo = branchResult.text();
+          context += `Current branch: ${branchInfo.trim()}\n`;
+        } catch (e) {
+          context += "Could not determine current branch.\n";
+        }
       }
     } catch (e) {
       context += "This is not a git repository.\n";
@@ -159,43 +151,12 @@ export async function getProjectContext() {
 
     // Try to get file structure (limiting depth to avoid overwhelming output)
     try {
-      const findProc = spawn(
-        [
-          "find",
-          ".",
-          "-type",
-          "f",
-          "-not",
-          "-path",
-          "*/node_modules/*",
-          "-not",
-          "-path",
-          "*/\\.git/*",
-        ],
-        { stdout: "pipe" },
-      );
-
-      const findOutput = await new Response(findProc.stdout).text();
-      await findProc.exited;
-
-      const sortProc = spawn(["sort"], {
-        stdin: new TextEncoder().encode(findOutput),
-        stdout: "pipe",
-      });
-
-      const sortedOutput = await new Response(sortProc.stdout).text();
-      await sortProc.exited;
-
-      const headProc = spawn(["head", "-50"], {
-        stdin: new TextEncoder().encode(sortedOutput),
-        stdout: "pipe",
-      });
-
-      const fileStructure = await new Response(headProc.stdout).text();
-      await headProc.exited;
+      const findCommand = `find . -type f -not -path "*/node_modules/*" -not -path "*/.git/*"`;
+      const findResult = await $`${findCommand} | sort | head -50`.quiet();
+      const findOutput = findResult.text();
 
       context += "\nProject Structure (limited to 50 files):\n";
-      context += fileStructure;
+      context += findOutput;
     } catch (e) {
       context += "Could not determine file structure.\n";
     }

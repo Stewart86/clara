@@ -1,5 +1,6 @@
 import { log } from "./logger.js";
 import { getProjectContext, getMemoryFilesContext } from "./codebase.js";
+import { getSessionState, type SessionState, type CommandApprovalState } from "./sessionState.js";
 
 /**
  * Transforms markdown formatting to terminal ANSI escape codes
@@ -19,4 +20,11 @@ export function markdownToTerminal(text: string): string {
   return text;
 }
 
-export { log, getProjectContext, getMemoryFilesContext };
+export { 
+  log, 
+  getProjectContext, 
+  getMemoryFilesContext, 
+  getSessionState, 
+  type SessionState, 
+  type CommandApprovalState 
+};

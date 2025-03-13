@@ -9,10 +9,14 @@
   "type": "module",
   "scripts": {
     "start": "bun src/index.ts",
-    "build": "bun build src/index.ts --outdir dist",
+    "build": "bun build src/index.ts --outdir dist --target bun",
     "dev": "bun --watch src/index.ts",
     "test": "bun test",
-    "clara": "bun src/cli/index.ts"
+    "test:security": "bun test src/tests/command-security.test.ts",
+    "test:manual": "bun src/tests/manual-command-test.ts",
+    "test:pentest": "bun src/tests/security-pentest.ts",
+    "clara": "bun src/cli/index.ts",
+    "install-binary": "./install.sh"
   },
   "dependencies": {
     "ai": "latest",

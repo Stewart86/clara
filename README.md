@@ -28,6 +28,28 @@ Clara runs entirely using a command line interface. It can be used interactively
 - Node.js (>= 18.0.0)
 - API keys for supported AI models (OpenAI, Anthropic, etc.)
 
+### Optional Dependencies
+
+- [Gum](https://github.com/charmbracelet/gum) - For enhanced interactive command approval dialogs
+
+#### Recommended Modern CLI Tools
+
+- **File Operations**:
+  - [fd](https://github.com/sharkdp/fd) - Modern alternative to `find` for improved search
+  - [ripgrep](https://github.com/BurntSushi/ripgrep) - Fast code search tool
+  - [bat](https://github.com/sharkdp/bat) - A `cat` clone with syntax highlighting
+  - [exa/eza](https://github.com/eza-community/eza) - Modern replacement for `ls`
+
+- **Data Processing**:
+  - [jq](https://stedolan.github.io/jq/) - Command-line JSON processor
+  - [yq](https://github.com/mikefarah/yq) - YAML processor
+
+- **JavaScript Development**:
+  - [Bun](https://bun.sh) - All-in-one JavaScript runtime and toolkit
+  - [Deno](https://deno.land) - Secure JavaScript/TypeScript runtime
+
+Clara's command security system has built-in support for all these tools.
+
 ## Installation
 
 ### From Source
@@ -164,9 +186,61 @@ Clara leverages multiple tools to interact with codebases:
 
 - **Search Tool**: Find files and code patterns with regex support
 - **File Reader**: Read and parse code files
-- **Command Tool**: Execute shell commands
+- **Command Tool**: Execute shell commands with security checks
 - **Memory Tools**: Read/write to persistent storage
 - **Analysis Tools**: Parse code structure and relationships
+
+#### Command Security
+
+Clara's command execution system implements a multi-tiered security approach:
+
+- **Command Classification**: Commands are categorized as safe, cautious, or dangerous
+- **Pattern Recognition**: Detects potentially harmful patterns like root-level operations
+- **User Approval**: Requires interactive confirmation for cautious/dangerous commands
+- **Session Memory**: Option to remember approvals for the duration of a session
+- **Hard Rejections**: Immediately blocks commands that could cause system damage
+
+The system uses [Gum](https://github.com/charmbracelet/gum) for interactive confirmation dialogs when available, with a fallback to standard input.
+
+##### Modern CLI Tool Support
+
+Clara's security system supports both traditional Unix commands and modern alternatives:
+
+**Safe Tools** (run without confirmation):
+- **File Listing**: `ls`, `exa`, `lsd`
+- **File Search**: `find`, `fd`
+- **Content Search**: `grep`, `rg` (ripgrep)
+- **File Viewing**: `cat`, `bat`
+- **JSON/YAML Processing**: `jq`, `yq`
+- **Disk Usage**: `du`, `df`, `dust`, `duf`
+
+**Caution Tools** (require confirmation):
+- **JavaScript Runtimes**: `node`, `deno`, `bun` (non-install commands)
+- **Package Managers**: `npm`, `yarn`, `pnpm` (non-install commands)
+- **Build Tools**: `cargo`, `go` (non-install commands)
+
+**Dangerous Tools** (high scrutiny, may be rejected):
+- **System Modification**: `sudo`, `chmod`, `chown`
+- **Package Installation**: `npm install`, `bun add`, `deno install`
+- **Network Tools**: `curl`, `wget` 
+- **Container Tools**: `docker`, `podman`, `nerdctl`
+
+##### Testing the Command Security System
+
+Clara includes comprehensive tests for the command security system:
+
+```bash
+# Run automated unit tests
+bun test:security
+
+# Run a manual interaction test to verify confirmation dialogs
+bun test:manual
+
+# Run a penetration test to check for security bypasses
+bun test:pentest
+```
+
+The penetration test script (`test:pentest`) tries to find ways to bypass the security system by generating permutations of dangerous commands with various obfuscation techniques. It produces a detailed report showing which commands were blocked and any potential security bypasses discovered.
 
 ## Extending Clara
 

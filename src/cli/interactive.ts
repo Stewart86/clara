@@ -20,6 +20,11 @@ export async function interactive(projectPath: string = process.cwd()) {
     input: process.stdin,
     output: process.stdout,
   });
+  
+  // Share the readline interface via session state
+  setProjectIdentifier(process.cwd());
+  const sessionState = await import("../utils/sessionState.js").then(module => module.getSessionState());
+  sessionState.setSharedReadline(rl);
 
   // Handle Ctrl+C gracefully
   process.on("SIGINT", () => {
@@ -114,24 +119,24 @@ export async function interactive(projectPath: string = process.cwd()) {
 
         // Process the prompt and get streaming response
         const stream = streamText({
-          model: openai("gpt-4o-mini"),
+          model: openai("o3-mini"),
           messages,
+          providerOptions: {
+            openai: { reasoningEffot: "low" },
+          },
           tools,
-          toolChoice: "auto",
           maxSteps: 50,
+          maxTokens: 15000,
         });
 
         let fullText = "";
 
-        // Process and output the stream
         for await (const chunk of stream.textStream) {
-          // Transform markdown formatting to terminal formatting
           const formattedChunk = markdownToTerminal(chunk);
           process.stdout.write(formattedChunk);
           fullText += chunk; // Store the original text in the conversation history
         }
 
-        // Add assistant response to conversation history
         messages.push({
           role: "assistant",
           content: fullText,
@@ -143,7 +148,6 @@ export async function interactive(projectPath: string = process.cwd()) {
           code: string;
           message: string;
         };
-        // If we get an error during input (like ERR_USE_AFTER_CLOSE), break the loop
         if (inputError.code === "ERR_USE_AFTER_CLOSE") {
           running = false;
           break;
@@ -151,8 +155,6 @@ export async function interactive(projectPath: string = process.cwd()) {
         console.error(chalk.red("Input Error:"), inputError.message);
       }
     }
-
-    // Change back to original directory
     process.chdir(originalDir);
   } catch (error) {
     console.error(chalk.red("Error:"), error);
