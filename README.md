@@ -22,6 +22,22 @@ Clara runs entirely via a command line interface. It can be used interactively o
 - **Business-Savvy Insights**: With a strong business focus, Clara highlights how specific code components impact overall business functions and operational efficiency.
 - **Engaging and Casual Interaction**: Clara maintains a professional yet approachable demeanor, occasionally using humor to make technical discussions more engaging.
 
+## Agents
+
+Clara is built using a suite of specialized agents that work together to analyze and explain code:
+
+1. **Thinker Agent**: Organizes complex thoughts and outlines potential solutions.
+2. **Parser Agent**: Analyzes code snippets to understand structure and functionality.
+3. **Meme Agent**: Injects light-hearted humor through relatable programming memes.
+4. **Pun Agent**: Crafts programming-related puns to add a fun twist to explanations.
+5. **Search Agent**: Efficiently locates code patterns and files within the project.
+6. **Assistant Agent**: Provides comprehensive assistance by managing and coordinating the other agents.
+
+- **End-to-End Code Investigation**: Clara methodically reads, parses, and interprets code, piecing together the logic and purpose behind every module or function.
+- **Layman-Friendly Explanations**: Clara transforms technical jargon into accessible language, bridging the gap between complex code logic and business strategy.
+- **Business-Savvy Insights**: With a strong business focus, Clara highlights how specific code components impact overall business functions and operational efficiency.
+- **Engaging and Casual Interaction**: Clara maintains a professional yet approachable demeanor, occasionally using humor to make technical discussions more engaging.
+
 ## Prerequisites
 
 - [Bun](https://bun.sh) (>= 1.0.0)

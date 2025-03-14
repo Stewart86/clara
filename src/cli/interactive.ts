@@ -12,9 +12,36 @@ import { systemPrompt } from "../prompts/system-prompt.js";
 import { getTools, setProjectIdentifier } from "../tools/index.js";
 import { openai } from "@ai-sdk/openai";
 import { getProjectContext, getMemoryFilesContext } from "../utils/codebase.js";
-import { log, markdownToTerminal } from "../utils/index.js";
+import { log, markdownToTerminal, TokenTracker } from "../utils/index.js";
 import { getSettings } from "../utils/settings.js";
 import boxen, { type Options } from "boxen";
+
+/**
+ * Display token usage summary from TokenTracker
+ */
+function displayTokenUsageSummary() {
+  const tokenTracker = TokenTracker.getInstance();
+  const totalUsage = tokenTracker.getTotalTokenUsage();
+  const agentUsage = tokenTracker.getTokenUsageByAgent();
+  
+  console.log(chalk.yellow("\n📊 Token Usage Summary:"));
+  console.log(chalk.yellow("───────────────────────"));
+  
+  // Display usage by agent
+  Object.entries(agentUsage).forEach(([agent, usage]) => {
+    console.log(chalk.cyan(`${agent}:`));
+    console.log(`  Prompt: ${usage.promptTokens.toLocaleString()} tokens`);
+    console.log(`  Completion: ${usage.completionTokens.toLocaleString()} tokens`);
+    console.log(`  Total: ${usage.totalTokens.toLocaleString()} tokens`);
+  });
+  
+  // Display total usage
+  console.log(chalk.yellow("\nTotal Usage:"));
+  console.log(`  Prompt: ${totalUsage.promptTokens.toLocaleString()} tokens`);
+  console.log(`  Completion: ${totalUsage.completionTokens.toLocaleString()} tokens`);
+  console.log(chalk.green(`  Total: ${totalUsage.totalTokens.toLocaleString()} tokens`));
+  console.log();
+}
 
 export async function interactive(projectPath: string = process.cwd()) {
   console.log(
@@ -42,6 +69,10 @@ export async function interactive(projectPath: string = process.cwd()) {
   // Handle Ctrl+C gracefully
   process.on("SIGINT", async () => {
     console.log(chalk.blue("\nClara: ") + "Goodbye! Have a great day!");
+    
+    // Display token usage summary
+    displayTokenUsageSummary();
+    
     rl.close();
 
     // Close all MCP clients if they exist
@@ -187,6 +218,9 @@ export async function interactive(projectPath: string = process.cwd()) {
             boxen("Goodbye! Have a great day! 👋", goodbyeBoxOptions),
           );
           console.log(); // Add extra space
+          
+          // Display token usage summary
+          displayTokenUsageSummary();
 
           running = false;
           break;
@@ -198,7 +232,7 @@ export async function interactive(projectPath: string = process.cwd()) {
         process.stdout.write("thinking...");
 
         // Process the prompt and get streaming response
-        const { text } = await generateText({
+        const response = await generateText({
           model: openai("o3-mini"),
           messages,
           providerOptions: {
@@ -212,6 +246,24 @@ export async function interactive(projectPath: string = process.cwd()) {
           },
           maxSteps: 100,
         });
+        
+        const { text } = response;
+        
+        // Track token usage for the main conversation
+        const tokenTracker = TokenTracker.getInstance();
+        if (response.usage) {
+          tokenTracker.recordTokenUsage(
+            "main",
+            response.usage.prompt_tokens || 0,
+            response.usage.completion_tokens || 0
+          );
+        } else {
+          // Fallback estimation if usage stats aren't available
+          const promptTokenEstimate = Math.ceil(messages.reduce((total, msg) => 
+            total + (msg.content?.length || 0), 0) / 4);
+          const completionTokenEstimate = Math.ceil(text.length / 4);
+          tokenTracker.recordTokenUsage("main", promptTokenEstimate, completionTokenEstimate);
+        }
 
         process.stdout.moveCursor(0, -1);
         process.stdout.clearLine(1);
@@ -258,6 +310,11 @@ export async function interactive(projectPath: string = process.cwd()) {
   } catch (error) {
     console.error(chalk.red("Error:"), error);
   } finally {
+    // Display token usage summary if there was a non-graceful exit
+    if (TokenTracker.getInstance().getTotalTokenUsage().totalTokens > 0) {
+      displayTokenUsageSummary();
+    }
+    
     // Close the readline interface
     rl.close();
 

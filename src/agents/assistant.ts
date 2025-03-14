@@ -2,6 +2,7 @@ import { log } from "../utils/logger";
 import { openai } from "@ai-sdk/openai";
 import { getTools } from "../tools";
 import { generateText } from "ai";
+import { TokenTracker } from "../utils/tokenTracker";
 
 /**
  * Assistant agent powered by OpenAI o1-mini
@@ -34,6 +35,22 @@ Your primary goal is to assist with complex code analysis and explanation tasks.
         { role: "user", content: prompt },
       ],
     });
+
+    // Track token usage - extract usage data from response if available
+    const tokenTracker = TokenTracker.getInstance();
+    if (response.usage) {
+      tokenTracker.recordTokenUsage(
+        "assistant",
+        response.usage.prompt_tokens || 0,
+        response.usage.completion_tokens || 0
+      );
+    } else {
+      // Fallback if usage stats aren't available
+      // Estimate based on typical token counts (rough estimate)
+      const promptTokenEstimate = Math.ceil((systemPrompt.length + prompt.length) / 4);
+      const completionTokenEstimate = Math.ceil(response.text.length / 4);
+      tokenTracker.recordTokenUsage("assistant", promptTokenEstimate, completionTokenEstimate);
+    }
 
     return response.text;
   } catch (error) {
