@@ -8,6 +8,7 @@ import {
   punAgent,
   assistantAgent,
   searchAgent as searchAssistant,
+  planner,
 } from "../agents/index.js";
 import { writeMemory, createDirectory } from "./memoryWriter.js";
 import { readMemory } from "./memoryReader.js";
@@ -21,6 +22,7 @@ import {
 } from "./memoryUtils.js";
 import { log } from "../utils/index.js";
 import { commandPrompt } from "../prompts/command-prompt.js";
+import { plannerAgent } from "../agents/planner.js";
 
 // Tool for writing files (restricted to ~/.config/clara/ directory)
 const writeMemoryTool: Tool = tool({
@@ -134,18 +136,20 @@ const commandTool: Tool = tool({
 });
 
 // Tool for analyzing code structure
-const analyzeTool: Tool = tool({
-  description:
-    "Analyze the structure of code in a file or directory. Use after reading file contents to understand complex patterns.",
+const planner: Tool = tool({
+  description: `An AI agent that provides planning before starting on a coding task. It can analyze code, identify potential issues, and suggest improvements. Use this tool for deep reasoning and complex problem solving.`,
   parameters: z.object({
-    target: z.string().describe("File or directory to analyze"),
-    analysisType: z
-      .enum(["dependencies", "business_logic", "data_flow", "api_surface"])
-      .describe("Type of analysis to perform"),
+    description: z
+      .string()
+      .describe("The task or problem to analyze, be as detailed as possible"),
+    additionalContext: z
+      .string()
+      .describe(
+        "Additional context to consider during analysis. Provide any relevant information that may help the agent understand the problem better.",
+      ),
   }),
-  execute: async ({ target, analysisType }) => {
-    // TODO: Implement code analysis
-    return `Analysis of ${target} for ${analysisType} (not yet implemented)`;
+  execute: async ({ description, additionalContext }) => {
+    return await plannerAgent(description, additionalContext);
   },
 });
 
@@ -273,12 +277,12 @@ export function getTools(): ToolSet {
     searchAgent,
     readFileTool,
     commandTool,
-    // analyzeTool,
     thinkTool,
     parserTool,
     memeTool,
     punTool,
     writeMemoryTool,
+    planner,
     mkdirTool,
     memoryTool,
     assistantTool,

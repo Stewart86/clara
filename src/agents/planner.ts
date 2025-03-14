@@ -2,18 +2,23 @@ import { openai } from "@ai-sdk/openai";
 import { generateText } from "ai";
 import { log } from "../utils/logger.js";
 import type { OpenAIChatModelId } from "@ai-sdk/openai/internal";
-import { getTools } from "../tools/index.js";
 import { TokenTracker } from "../utils/index.js";
 
 /**
- * The thinker agent - for deep reasoning and complex problem solving
- * @param thought The prompt for the thinker agent
+ * The planner agent - for deep reasoning and complex problem solving
+ * @param thought The prompt for the planner agent
  * @returns The generated insights
  */
-export async function thinkerAgent(thought: string): Promise<string> {
-  log(`[Thinker] hmm...\n${thought}`, "system");
+export async function plannerAgent(
+  description: string,
+  additonalContext: string,
+): Promise<string> {
+  log(
+    `[Planner] Description: ${description}, additonalContext: ${additonalContext}`,
+    "system",
+  );
 
-  const systemPrompt = `You are Clara's Thinker Agent, a powerful analytical engine for deep reasoning and complex problem solving. Your primary purpose is to provide thorough analysis and actionable insights on code and software engineering questions.
+  const systemPrompt = `You are Clara's Planner Agent, a powerful analytical engine for deep reasoning and complex problem solving. Your primary purpose is to provide thorough analysis and actionable insights on code and software engineering questions.
 
 Key responsibilities:
 1. Analyze code patterns, architecture decisions, and technical implementations
@@ -21,6 +26,7 @@ Key responsibilities:
 3. Suggest improvements and refactoring opportunities with concrete examples
 4. Connect technical details to business implications and user experiences
 5. Provide step-by-step reasoning for complex technical problems
+6. Provide actionable recommendations for codebase maintainability and scalability
 
 Guidelines:
 - Be comprehensive but structured in your analysis
@@ -40,8 +46,8 @@ FORMAT YOUR RESPONSE:
 `;
 
   try {
-    const model: OpenAIChatModelId = "o3-mini";
-    log(`[Thinker] Generating response with ${model}`, "system");
+    const model: OpenAIChatModelId = "o1";
+    log(`[Planner] Generating response with ${model}`, "system");
     const response = await generateText({
       model: openai(model),
       providerOptions: {
@@ -49,39 +55,48 @@ FORMAT YOUR RESPONSE:
       },
       messages: [
         { role: "system", content: systemPrompt },
-        { role: "user", content: thought },
+        {
+          role: "user",
+          content: `Analyse this "${description}". Here are some additional context: ${additonalContext}`,
+        },
       ],
-      tools: getTools(),
     });
-    
+
     const { text } = response;
-    
+
     // Track token usage
     const tokenTracker = TokenTracker.getInstance();
     if (response.usage) {
       tokenTracker.recordTokenUsage(
-        "thinker",
+        "planner",
         response.usage.promptTokens || 0,
-        response.usage.completionTokens || 0
+        response.usage.completionTokens || 0,
       );
     } else {
       // Fallback if usage stats aren't available
-      const promptTokenEstimate = Math.ceil((systemPrompt.length + thought.length) / 4);
+      const promptTokenEstimate = Math.ceil(
+        (systemPrompt.length + description.length + additonalContext.length) /
+          4,
+      );
       const completionTokenEstimate = Math.ceil(text.length / 4);
-      tokenTracker.recordTokenUsage("thinker", promptTokenEstimate, completionTokenEstimate);
+      tokenTracker.recordTokenUsage(
+        "planner",
+        promptTokenEstimate,
+        completionTokenEstimate,
+      );
     }
 
     log(
-      `[Thinker] Response generated successfully (${text.length} chars)`,
+      `[Planner] Response generated successfully (${text.length} chars)`,
       "system",
     );
-    log(`[Thinker] thinking...\n${text}`, "system");
+    log(`[Planner] thinking...\n${text}`, "system");
     return text;
   } catch (error) {
     log(
-      `[Thinker Error] ${error instanceof Error ? error.message : String(error)}`,
+      `[Planner Error] ${error instanceof Error ? error.message : String(error)}`,
       "error",
     );
-    return `Error in Thinker Agent: ${error instanceof Error ? error.message : String(error)}`;
+    return `Error in Planner Agent: ${error instanceof Error ? error.message : String(error)}`;
   }
 }

@@ -8,3 +8,6 @@
 6. Newline on stdin
 7. User prompt for new MCP server CRUD
 8. Background color on changed text for diff
+9. image parsing
+10. planning agent
+11. use command agent
