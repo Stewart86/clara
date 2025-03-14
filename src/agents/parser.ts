@@ -2,6 +2,7 @@ import { openai } from "@ai-sdk/openai";
 import { generateText } from "ai";
 import { log } from "../utils/logger.js";
 import type { OpenAIChatModelId } from "@ai-sdk/openai/internal";
+import { getTools } from "../tools/index.js";
 
 /**
  * The parser agent - for code understanding and parsing
@@ -41,7 +42,7 @@ Guidelines:
 `;
 
   try {
-    const model: OpenAIChatModelId = "o1-mini";
+    const model: OpenAIChatModelId = "o3-mini";
     log(`[Parser] Generating analysis with ${model}`, "system");
     const { text } = await generateText({
       model: openai(model),
@@ -49,7 +50,7 @@ Guidelines:
         { role: "system", content: systemPrompt },
         { role: "user", content: code },
       ],
-      maxTokens: 6000,
+      tools: getTools(),
     });
 
     log(

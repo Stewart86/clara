@@ -6,6 +6,7 @@ import {
   type CoreMessage,
   streamText,
   experimental_createMCPClient as createMCPClient,
+  generateText,
 } from "ai";
 import { systemPrompt } from "../prompts/system-prompt.js";
 import { getTools, setProjectIdentifier } from "../tools/index.js";
@@ -13,7 +14,7 @@ import { openai } from "@ai-sdk/openai";
 import { getProjectContext, getMemoryFilesContext } from "../utils/codebase.js";
 import { log, markdownToTerminal } from "../utils/index.js";
 import { getSettings } from "../utils/settings.js";
-import boxen from "boxen";
+import boxen, { type Options } from "boxen";
 
 export async function interactive(projectPath: string = process.cwd()) {
   console.log(
@@ -140,14 +141,6 @@ export async function interactive(projectPath: string = process.cwd()) {
 
     const tools = getTools();
 
-    // Spinner text options for a more dynamic experience
-    const spinnerTexts = [
-      "Analyzing your request...",
-      "Searching codebase...",
-      "Processing information...",
-      "Generating response...",
-    ];
-
     while (running) {
       try {
         // Get input from user
@@ -159,7 +152,7 @@ export async function interactive(projectPath: string = process.cwd()) {
           const terminalWidth = process.stdout.columns || 80;
           const boxWidth = Math.min(Math.floor(terminalWidth * 0.7), 80);
 
-          const userBoxOptions = {
+          const userBoxOptions: Options = {
             padding: 1,
             margin: { top: 1, bottom: 1, left: 10, right: 1 },
             borderStyle: "round",
@@ -167,7 +160,8 @@ export async function interactive(projectPath: string = process.cwd()) {
             title: chalk.green("You"),
             width: boxWidth,
             float: "right",
-            textAlignment: "right",
+            titleAlignment: "right",
+            textAlignment: "left",
           };
 
           // Just display the boxed message without trying to clear the line
@@ -179,7 +173,7 @@ export async function interactive(projectPath: string = process.cwd()) {
         if (prompt.toLowerCase() === "exit") {
           const boxWidth = Math.min(Math.floor(terminalWidth * 0.7), 80);
 
-          const goodbyeBoxOptions = {
+          const goodbyeBoxOptions: Options = {
             padding: 1,
             margin: { top: 1, bottom: 1, left: 1, right: 10 },
             borderStyle: "round",
@@ -201,8 +195,10 @@ export async function interactive(projectPath: string = process.cwd()) {
         // Add user message to conversation history
         messages.push({ role: "user", content: prompt });
 
+        process.stdout.write("thinking...");
+
         // Process the prompt and get streaming response
-        const stream = streamText({
+        const { text } = await generateText({
           model: openai("o3-mini"),
           messages,
           providerOptions: {
@@ -214,32 +210,22 @@ export async function interactive(projectPath: string = process.cwd()) {
               mcpTools.flatMap((toolSet) => Object.entries(toolSet)),
             ),
           },
-          maxSteps: 50,
-          maxTokens: 15000,
+          maxSteps: 100,
         });
 
-        let fullText = "";
+        process.stdout.moveCursor(0, -1);
+        process.stdout.clearLine(1);
 
-        // Instead of streaming the text directly, collect it first
-        let streamingText = "";
-
-        // Collect the full text from the stream
-        for await (const chunk of stream.textStream) {
-          fullText += chunk;
-          streamingText += chunk;
-        }
-
-        // Clear the temporary message
-        process.stdout.write("\r" + " ".repeat(50) + "\r");
+        log(`Raw response: ${text}`, "info");
 
         // Format the text with markdown conversion
-        const formattedText = markdownToTerminal(streamingText);
+        const formattedText = markdownToTerminal(text);
 
         // Display the response in a box on the left
         // Reuse the same terminalWidth variable
         const boxWidth = Math.min(Math.floor(terminalWidth * 0.7), 80);
 
-        const claraBoxOptions = {
+        const claraBoxOptions: Options = {
           padding: 1,
           margin: { top: 1, bottom: 1, left: 1, right: 10 },
           borderStyle: "round",
@@ -253,7 +239,7 @@ export async function interactive(projectPath: string = process.cwd()) {
 
         messages.push({
           role: "assistant",
-          content: fullText,
+          content: text,
         });
 
         // Add extra space after response
