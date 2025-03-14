@@ -449,6 +449,7 @@ function escapeRegExp(string: string): string {
 export async function replaceFile(
   filePath: string,
   content: string,
+  reason: string,
 ): Promise<string> {
   try {
     // Check if path is allowed for editing
@@ -494,6 +495,7 @@ export async function replaceFile(
 
       // Generate the diff to show to user even if pre-approved
       const diff = generateDiff(oldContent, content, absolutePath);
+      log(`${reason}`, "info");
 
       // Display the file path and diff for pre-approved edit
       log(`[Edit] File: ${absolutePath}`, "system");

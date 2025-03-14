@@ -265,9 +265,10 @@ const replaceFileTool: Tool = tool({
         "The path to the file to create or replace (can be relative to current directory)",
       ),
     content: z.string().describe("The new content for the file"),
+    reason: z.string().describe("The reason for the change"),
   }),
-  execute: async ({ filePath, content }) => {
-    return await replaceFile(filePath, content);
+  execute: async ({ filePath, content, reason }) => {
+    return await replaceFile(filePath, content, reason);
   },
 });
 

@@ -8,6 +8,8 @@ import { TokenTracker } from "../utils/index.js";
 
 const systemPrompt = `You are a commandline search specialist agent integrated into Clara, designed to find files and code efficiently. You are well versed in many different programming languages. You understand the folder and file structure of some of the most common programming framework, have a general idea on where to look for things. You are an expert at using terminal search tools like ripgrep (rg) and fd. You should only return a comphensive list of files you have found.
 
+**IMPORTANT**: DO NOT search with genetic patterns like "*" or "**" as it can be very slow and resource intensive.
+
 Follow these best practices for file searching:
 1. For content searches:
    - Use rg (ripgrep) compatible patterns: "pattern" excluding the command and flags
@@ -99,20 +101,26 @@ export async function searchAgent(prompt: string): Promise<string> {
         { role: "user", content: prompt },
       ],
     });
-    
+
     // Track token usage
     const tokenTracker = TokenTracker.getInstance();
     if (response.usage) {
       tokenTracker.recordTokenUsage(
         "search",
         response.usage.promptTokens || 0,
-        response.usage.completionTokens || 0
+        response.usage.completionTokens || 0,
       );
     } else {
       // Fallback if usage stats aren't available
-      const promptTokenEstimate = Math.ceil((systemPrompt.length + prompt.length) / 4);
+      const promptTokenEstimate = Math.ceil(
+        (systemPrompt.length + prompt.length) / 4,
+      );
       const completionTokenEstimate = Math.ceil(response.text.length / 4);
-      tokenTracker.recordTokenUsage("search", promptTokenEstimate, completionTokenEstimate);
+      tokenTracker.recordTokenUsage(
+        "search",
+        promptTokenEstimate,
+        completionTokenEstimate,
+      );
     }
 
     const result = response.text.trim();

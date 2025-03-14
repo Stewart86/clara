@@ -48,7 +48,7 @@ export async function searchFiles(
 
     if (pattern.length < 3 || /^[a-z0-9]{1,2}$/i.test(pattern)) {
       log(`[Search] Pattern '${pattern}' is too generic`, "warning");
-      return `Your search term '${pattern}' is too generic and may return too many results. Please use a more specific search pattern with at least 3 characters.`;
+      return `Your search term '${pattern}' is too generic. Please use a more specific search pattern with at least 3 characters.`;
     }
 
     try {

@@ -278,11 +278,11 @@ export function generateDiff(
 
           if (chunk.type === "added") {
             const formattedLine = formatLineNumber(newLine, "+", "32m");
-            formattedDiff += `${formattedLine}${highlightedLine}\x1b[0m\n`;
+            formattedDiff += `${formattedLine}${chalk.bgGreen(highlightedLine)}\n`;
             newLine++;
           } else if (chunk.type === "removed") {
             const formattedLine = formatLineNumber(oldLine, "-", "31m");
-            formattedDiff += `${formattedLine}${highlightedLine}\x1b[0m\n`;
+            formattedDiff += `${formattedLine}${chalk.bgRed(highlightedLine)}\n`;
             oldLine++;
           } else {
             const formattedLine = formatLineNumber(oldLine, " ", "90m");

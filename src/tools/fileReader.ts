@@ -111,7 +111,8 @@ async function readFileContent(
           // Use bat with line-range option and plain style (no decorations)
           const { stdout } =
             await $`bat --line-range=${rangeArg} --plain --color=never ${filePath}`.quiet();
-          log(`[Read] Successfully read lines ${rangeArg}`, "system");
+          const relativeFile = path.relative(process.cwd(), filePath);
+          log(`[Read] Successfully read lines ${rangeArg} from ${relativeFile}`, "system");
           return stdout.toString();
         } catch (e) {
           // bat is not available, fallback to using Bun.file and manual line processing

@@ -180,9 +180,34 @@ export async function interactive(projectPath: string = process.cwd()) {
 
     while (running) {
       try {
-        // Get input from user
-        const prompt = await rl.question(chalk.green(" > "));
-
+        console.log(chalk.gray("Tip: Enter a blank line to finish multiline input"));
+        
+        // Custom multiline input handler for getting input
+        let lines: string[] = [];
+        let firstLine = await rl.question(chalk.green(" > "));
+        
+        // Set up prompt variable that will be used throughout the rest of the loop
+        let prompt = "";
+        
+        // Check for exit command on the first line
+        if (firstLine.toLowerCase() === "exit") {
+          prompt = "exit";
+        } else {
+          // Start collecting lines
+          lines.push(firstLine);
+          
+          // Keep collecting lines until an empty line is entered
+          let nextLine = "";
+          while (true) {
+            nextLine = await rl.question(chalk.green("... "));
+            // Empty line signals end of input
+            if (nextLine.trim() === "") break;
+            lines.push(nextLine);
+          }
+          
+          prompt = lines.join("\n");
+        }
+        
         // Skip displaying empty prompts
         if (prompt.trim()) {
           // Display the user message in a box on the right
