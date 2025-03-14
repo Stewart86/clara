@@ -3,6 +3,7 @@ import { generateText } from "ai";
 import { log } from "../utils/logger.js";
 import type { OpenAIChatModelId } from "@ai-sdk/openai/internal";
 import { getTools } from "../tools/index.js";
+import { TokenTracker } from "../utils/index.js";
 
 /**
  * The thinker agent - for deep reasoning and complex problem solving
@@ -41,7 +42,7 @@ FORMAT YOUR RESPONSE:
   try {
     const model: OpenAIChatModelId = "o3-mini";
     log(`[Thinker] Generating response with ${model}`, "system");
-    const { text } = await generateText({
+    const response = await generateText({
       model: openai(model),
       providerOptions: {
         openai: { reasoningEffort: "high" },
@@ -52,6 +53,23 @@ FORMAT YOUR RESPONSE:
       ],
       tools: getTools(),
     });
+    
+    const { text } = response;
+    
+    // Track token usage
+    const tokenTracker = TokenTracker.getInstance();
+    if (response.usage) {
+      tokenTracker.recordTokenUsage(
+        "thinker",
+        response.usage.promptTokens || 0,
+        response.usage.completionTokens || 0
+      );
+    } else {
+      // Fallback if usage stats aren't available
+      const promptTokenEstimate = Math.ceil((systemPrompt.length + thought.length) / 4);
+      const completionTokenEstimate = Math.ceil(text.length / 4);
+      tokenTracker.recordTokenUsage("thinker", promptTokenEstimate, completionTokenEstimate);
+    }
 
     log(
       `[Thinker] Response generated successfully (${text.length} chars)`,

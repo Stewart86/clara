@@ -4,6 +4,7 @@ import { generateText, type Tool, tool as aiTool } from "ai";
 import { z } from "zod";
 import { searchFiles } from "../tools/search";
 import type { OpenAIChatModelId } from "@ai-sdk/openai/internal";
+import { TokenTracker } from "../utils/index.js";
 
 const systemPrompt = `You are a commandline search specialist agent integrated into Clara, designed to find files and code efficiently. You are well versed in many different programming languages. You understand the folder and file structure of some of the most common programming framework, have a general idea on where to look for things. You are an expert at using terminal search tools like ripgrep (rg) and fd. You should only return a comphensive list of files you have found.
 
@@ -98,6 +99,21 @@ export async function searchAgent(prompt: string): Promise<string> {
         { role: "user", content: prompt },
       ],
     });
+    
+    // Track token usage
+    const tokenTracker = TokenTracker.getInstance();
+    if (response.usage) {
+      tokenTracker.recordTokenUsage(
+        "search",
+        response.usage.promptTokens || 0,
+        response.usage.completionTokens || 0
+      );
+    } else {
+      // Fallback if usage stats aren't available
+      const promptTokenEstimate = Math.ceil((systemPrompt.length + prompt.length) / 4);
+      const completionTokenEstimate = Math.ceil(response.text.length / 4);
+      tokenTracker.recordTokenUsage("search", promptTokenEstimate, completionTokenEstimate);
+    }
 
     const result = response.text.trim();
     return result;

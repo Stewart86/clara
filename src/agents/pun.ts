@@ -1,6 +1,7 @@
 import { openai } from '@ai-sdk/openai';
 import { generateText } from 'ai';
 import { log } from "../utils/logger.js";
+import { TokenTracker } from "../utils/index.js";
 
 /**
  * The pun agent - for generating programming-related puns
@@ -23,7 +24,7 @@ Example output format:
 
   try {
     log(`[Pun] Generating with gpt-4o-mini model`, "system");
-    const { text } = await generateText({
+    const response = await generateText({
       model: openai('gpt-4o-mini'),
       messages: [
         { role: 'system', content: systemPrompt },
@@ -32,6 +33,24 @@ Example output format:
       temperature: 0.9, // Higher temperature for more creative outputs
       maxTokens: 500,
     });
+    
+    const { text } = response;
+    
+    // Track token usage
+    const tokenTracker = TokenTracker.getInstance();
+    if (response.usage) {
+      tokenTracker.recordTokenUsage(
+        "pun",
+        response.usage.promptTokens || 0,
+        response.usage.completionTokens || 0
+      );
+    } else {
+      // Fallback if usage stats aren't available
+      const userPrompt = `Create programming puns using these keywords: ${keywords.join(', ')}`;
+      const promptTokenEstimate = Math.ceil((systemPrompt.length + userPrompt.length) / 4);
+      const completionTokenEstimate = Math.ceil(text.length / 4);
+      tokenTracker.recordTokenUsage("pun", promptTokenEstimate, completionTokenEstimate);
+    }
 
     log(`[Pun] Generated successfully (${text.length} chars)`, "system");
 

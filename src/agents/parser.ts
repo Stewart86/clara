@@ -3,6 +3,7 @@ import { generateText } from "ai";
 import { log } from "../utils/logger.js";
 import type { OpenAIChatModelId } from "@ai-sdk/openai/internal";
 import { getTools } from "../tools/index.js";
+import { TokenTracker } from "../utils/index.js";
 
 /**
  * The parser agent - for code understanding and parsing
@@ -44,7 +45,7 @@ Guidelines:
   try {
     const model: OpenAIChatModelId = "o3-mini";
     log(`[Parser] Generating analysis with ${model}`, "system");
-    const { text } = await generateText({
+    const response = await generateText({
       model: openai(model),
       messages: [
         { role: "system", content: systemPrompt },
@@ -52,6 +53,23 @@ Guidelines:
       ],
       tools: getTools(),
     });
+    
+    const { text } = response;
+    
+    // Track token usage
+    const tokenTracker = TokenTracker.getInstance();
+    if (response.usage) {
+      tokenTracker.recordTokenUsage(
+        "parser",
+        response.usage.promptTokens || 0,
+        response.usage.completionTokens || 0
+      );
+    } else {
+      // Fallback if usage stats aren't available
+      const promptTokenEstimate = Math.ceil((systemPrompt.length + code.length) / 4);
+      const completionTokenEstimate = Math.ceil(text.length / 4);
+      tokenTracker.recordTokenUsage("parser", promptTokenEstimate, completionTokenEstimate);
+    }
 
     log(
       `[Parser] Analysis generated successfully (${text.length} chars)`,

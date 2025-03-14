@@ -41,8 +41,8 @@ Your primary goal is to assist with complex code analysis and explanation tasks.
     if (response.usage) {
       tokenTracker.recordTokenUsage(
         "assistant",
-        response.usage.prompt_tokens || 0,
-        response.usage.completion_tokens || 0
+        response.usage.promptTokens || 0,
+        response.usage.completionTokens || 0
       );
     } else {
       // Fallback if usage stats aren't available

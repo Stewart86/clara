@@ -1,6 +1,7 @@
 import { openai } from '@ai-sdk/openai';
 import { generateText } from 'ai';
 import { log } from "../utils/logger.js";
+import { TokenTracker } from "../utils/index.js";
 
 /**
  * The meme agent - for generating programming-related memes
@@ -25,7 +26,7 @@ Caption: [text that would go on the meme]"`;
 
   try {
     log(`[Meme] Generating with gpt-4o-mini model`, "system");
-    const { text } = await generateText({
+    const response = await generateText({
       model: openai('gpt-4o-mini'),
       messages: [
         { role: 'system', content: systemPrompt },
@@ -34,6 +35,23 @@ Caption: [text that would go on the meme]"`;
       temperature: 0.9, // Higher temperature for more creative outputs
       maxTokens: 300,
     });
+    
+    const { text } = response;
+    
+    // Track token usage
+    const tokenTracker = TokenTracker.getInstance();
+    if (response.usage) {
+      tokenTracker.recordTokenUsage(
+        "meme",
+        response.usage.promptTokens || 0,
+        response.usage.completionTokens || 0
+      );
+    } else {
+      // Fallback if usage stats aren't available
+      const promptTokenEstimate = Math.ceil((systemPrompt.length + topic.length + 40) / 4); // +40 for the "Create a programming meme about: " text
+      const completionTokenEstimate = Math.ceil(text.length / 4);
+      tokenTracker.recordTokenUsage("meme", promptTokenEstimate, completionTokenEstimate);
+    }
 
     log(`[Meme] Generated successfully (${text.length} chars)`, "system");
     return text;
