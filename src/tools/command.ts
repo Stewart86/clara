@@ -825,7 +825,9 @@ async function executeCommand(command: string): Promise<string> {
 
   try {
     // Use Bun Shell to run the command
-    return await $`${rawCommand}`.text();
+    const commandResult = await $`${rawCommand}`.text();
+    log(`[Command] Output: ${commandResult}`);
+    return commandResult;
   } catch (error) {
     if (error instanceof Error && "stderr" in error) {
       const shellError = error as unknown as ShellError;

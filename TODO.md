@@ -1,13 +1,14 @@
 # TODO List
 
-1. Change thinker agent to analyser agent
-2. Print out command output to screen
-3. Tool for shutdown
-4. User create new commands
-5. User created command accessible via CLI arg
-6. Newline on stdin
-7. User prompt for new MCP server CRUD
-8. Background color on changed text for diff
-9. image parsing
-10. planning agent
-11. use command agent
+- [x] Change thinker agent to analyser agent
+- [ ] Print out command output to screen
+- [ ] Tool for shutdown
+- [ ] User create new commands
+- [ ] User created command accessible via CLI arg
+- [ ] Newline on stdin
+- [ ] User prompt for new MCP server CRUD
+- [ ] Background color on changed text for diff
+- [ ] image parsing
+- [ ] planning agent
+- [ ] use command agent
+- [ ] count context length
