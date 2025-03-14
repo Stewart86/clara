@@ -20,6 +20,7 @@ import {
   extractProjectIdentifier,
 } from "./memoryUtils.js";
 import { log } from "../utils/index.js";
+import { commandPrompt } from "../prompts/command-prompt.js";
 
 // Tool for writing files (restricted to ~/.config/clara/ directory)
 const writeMemoryTool: Tool = tool({
@@ -121,8 +122,7 @@ const readFileTool: Tool = tool({
 
 // Tool for running shell commands
 const commandTool: Tool = tool({
-  description:
-    "Run a shell command and return the output. Useful for listing directories, checking git history, etc. Potentially dangerous commands will require user approval.",
+  description: commandPrompt,
   parameters: z.object({
     command: z
       .string()
@@ -231,13 +231,19 @@ const editFileTool: Tool = tool({
   parameters: z.object({
     filePath: z
       .string()
-      .describe("The path to the file to edit (can be relative to current directory)"),
+      .describe(
+        "The path to the file to edit (can be relative to current directory)",
+      ),
     oldString: z
       .string()
-      .describe("The exact string to replace. Must be unique within the file. For new files, use an empty string."),
+      .describe(
+        "The exact string to replace. Must be unique within the file. For new files, use an empty string.",
+      ),
     newString: z
       .string()
-      .describe("The new string to insert in place of the old string (or entire file content for new files)"),
+      .describe(
+        "The new string to insert in place of the old string (or entire file content for new files)",
+      ),
   }),
   execute: async ({ filePath, oldString, newString }) => {
     return await editFile(filePath, oldString, newString);
@@ -251,10 +257,10 @@ const replaceFileTool: Tool = tool({
   parameters: z.object({
     filePath: z
       .string()
-      .describe("The path to the file to create or replace (can be relative to current directory)"),
-    content: z
-      .string()
-      .describe("The new content for the file"),
+      .describe(
+        "The path to the file to create or replace (can be relative to current directory)",
+      ),
+    content: z.string().describe("The new content for the file"),
   }),
   execute: async ({ filePath, content }) => {
     return await replaceFile(filePath, content);

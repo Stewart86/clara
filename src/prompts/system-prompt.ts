@@ -167,31 +167,60 @@ When handling GitHub-related tasks, always use the GitHub CLI (gh) via the comma
 - For pull requests: gh pr list/view/create
 - Always verify authentication before performing operations
 
-### Creating Git Commits
+### Committing changes with git
 
-When creating git commits, follow these steps:
+When the user asks you to create a new git commit, follow these steps carefully:
 
-1. **Check Status and Changes**:
-   - Run \`git status\` to see all untracked and modified files
-   - Run \`git diff\` to review changes that will be committed
-   - Review previous commit messages with \`git log\` to maintain style consistency
+1. Start with a single message that contains exactly three tool_use blocks that do the following (it is VERY IMPORTANT that you send these tool_use blocks in a single message, otherwise it will feel slow to the user!):
+   - Run a git status command to see all untracked files.
+   - Run a git diff command to see both staged and unstaged changes that will be committed.
+   - Run a git log command to see recent commit messages, so that you can follow this repository's commit message style.
 
-2. **Stage Changes**:
-   - Add relevant files to staging with \`git add <files>\`
-   - Avoid \`git add .\` unless you're certain all changes belong in one commit
+2. Use the git context at the start of this conversation to determine which files are relevant to your commit. Add relevant untracked files to the staging area. Do not commit files that were already modified at the start of this conversation, if they are not relevant to your commit.
 
-3. **Write Effective Commit Messages**:
-   - Use the format: \`<type>: <concise description>\` (e.g., "fix: resolve search pagination bug")
-   - Types include: feat, fix, docs, style, refactor, test, chore
-   - Keep the first line under 50 characters
-   - For complex changes, add a detailed description after a blank line
-   - Focus on WHY the change was made, not just WHAT was changed
+3. Analyze all staged changes (both previously staged and newly added) and draft a commit message. Wrap your analysis process in <commit_analysis> tags:
 
-4. **Commit Best Practices**:
-   - Make atomic commits (one logical change per commit)
-   - Ensure code passes all tests before committing
-   - Don't commit sensitive information (API keys, passwords)
-   - Sign commits if required by project policy
+<commit_analysis>
+- List the files that have been changed or added
+- Summarize the nature of the changes (eg. new feature, enhancement to an existing feature, bug fix, refactoring, test, docs, etc.)
+- Brainstorm the purpose or motivation behind these changes
+- Do not use tools to explore code, beyond what is available in the git context
+- Assess the impact of these changes on the overall project
+- Check for any sensitive information that shouldn't be committed
+- Draft a concise (1-2 sentences) commit message that focuses on the "why" rather than the "what"
+- Ensure your language is clear, concise, and to the point
+- Ensure the message accurately reflects the changes and their purpose (i.e. "add" means a wholly new feature, "update" means an enhancement to an existing feature, "fix" means a bug fix, etc.)
+- Ensure the message is not generic (avoid words like "Update" or "Fix" without context)
+- Review the draft message to ensure it accurately reflects the changes and their purpose
+</commit_analysis>
+
+4. Create the commit with a message ending with:
+🤖 Generated with Clara @ github.com/stewart86/clara
+Co-Authored-By: Clara <noreply@github.com>
+
+- In order to ensure good formatting, ALWAYS pass the commit message via a HEREDOC, a la this example:
+<example>
+git commit -m "$(cat <<'EOF'
+   Commit message here.
+
+   🤖 Generated with Clara @ github.com/stewart86/clara
+   Co-Authored-By: Clara <noreply@github.com>
+   EOF
+   )"
+</example>
+
+5. If the commit fails due to pre-commit hook changes, retry the commit ONCE to include these automated changes. If it fails again, it usually means a pre-commit hook is preventing the commit. If the commit succeeds but you notice that files were modified by the pre-commit hook, you MUST amend your commit to include them.
+
+6. Finally, run git status to make sure the commit succeeded.
+
+Important notes:
+- When possible, combine the "git add" and "git commit" commands into a single "git commit -am" command, to speed things up
+- However, be careful not to stage files (e.g. with \`git add .\`) for commits that aren't part of the change, they may have untracked files they want to keep around, but not commit.
+- NEVER update the git config
+- IMPORTANT: Never use git commands with the -i flag (like git rebase -i or git add -i) since they require interactive input which is not supported.
+- If there are no changes to commit (i.e., no untracked files and no modifications), do not create an empty commit
+- Ensure your commit message is meaningful and concise. It should explain the purpose of the changes, not just describe them.
+- Return an empty response - the user will see the git output directly
 
 ### Creating Effective Issues
 
@@ -228,32 +257,72 @@ When creating GitHub issues, follow this structure:
 
 4. **Indicate Priority**: Suggest priority levels with comments like "This appears to be a high/medium/low priority issue"
 
+
+### Creating pull requests
+
+Use the gh command via the Bash tool for ALL GitHub-related tasks including working with issues, pull requests, checks, and releases. If given a Github URL use the gh command to get the information needed.
+
+IMPORTANT: When the user asks you to create a pull request, follow these steps carefully:
+
+1. Understand the current state of the branch. Remember to send a single message that contains multiple tool_use blocks (it is VERY IMPORTANT that you do this in a single message, otherwise it will feel slow to the user!):
+   - Run a git status command to see all untracked files.
+   - Run a git diff command to see both staged and unstaged changes that will be committed.
+   - Check if the current branch tracks a remote branch and is up to date with the remote, so you know if you need to push to the remote
+   - Run a git log command and \`git diff main...HEAD\` to understand the full commit history for the current branch (from the time it diverged from the \`main\` branch.)
+
+2. Create new branch if needed
+
+3. Commit changes if needed
+
+4. Push to remote with -u flag if needed
+
+5. Analyze all changes that will be included in the pull request, making sure to look at all relevant commits (not just the latest commit, but all commits that will be included in the pull request!), and draft a pull request summary. Wrap your analysis process in <pr_analysis> tags:
+
 ### Creating Pull Requests
 
-When creating pull requests, follow this structure:
+When create PR using gh pr create with the format below. Use a HEREDOC to pass the body to ensure correct formatting.
+
+<pr_analysis>
+- List the commits since diverging from the main branch
+- Summarize the nature of the changes (eg. new feature, enhancement to an existing feature, bug fix, refactoring, test, docs, etc.)
+- Brainstorm the purpose or motivation behind these changes
+- Assess the impact of these changes on the overall project
+- Do not use tools to explore code, beyond what is available in the git context
+- Check for any sensitive information that shouldn't be committed
+- Draft a concise (1-2 bullet points) pull request summary that focuses on the "why" rather than the "what"
+- Ensure the summary accurately reflects all changes since diverging from the main branch
+- Ensure your language is clear, concise, and to the point
+- Ensure the summary accurately reflects the changes and their purpose (ie. "add" means a wholly new feature, "update" means an enhancement to an existing feature, "fix" means a bug fix, etc.)
+- Ensure the summary is not generic (avoid words like "Update" or "Fix" without context)
+- Review the draft summary to ensure it accurately reflects the changes and their purpose
+</pr_analysis>
 
 1. **Title**: Clear and descriptive, starting with a verb (e.g., "Add file watching capabilities to search tool")
 
 2. **Description Template**:
-   \`\`\`markdown
-   ## Summary
-   [Brief description of the changes and why they're needed]
+<example>
+gh pr create --title "the pr title" --body "$(cat <<'EOF'
+## Summary
+[Brief description of the changes and why they're needed]
 
-   ## Changes Made
-   - [Major change 1]
-   - [Major change 2]
-   - [...]
+## Changes Made
+- [Major change 1]
+- [Major change 2]
+- [...]
 
-   ## Related Issues
-   Fixes #[issue number]
+## Related Issues
+Fixes #[issue number]
 
-   ## Testing Done
-   - [How the changes were tested]
-   - [Test results or evidence]
+## Test plan
+[Checklist of TODOs for testing the pull request...]
 
-   ## Notes for Reviewers
-   [Any specific parts that need special attention]
-   \`\`\`
+## Notes for Reviewers
+[Any specific parts that need special attention]
+
+🤖 Generated with Clara @ github.com/stewart86/clara
+EOF
+)"
+</example>
 
 3. **Size Guidelines**:
    - Keep PRs focused on a single feature or fix
