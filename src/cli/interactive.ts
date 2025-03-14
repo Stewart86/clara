@@ -269,7 +269,7 @@ export async function interactive(projectPath: string = process.cwd()) {
           model: openai.responses("o3-mini"),
           messages,
           providerOptions: {
-            openai: { reasoningEffort: "high" },
+            openai: { reasoningEffort: "medium" },
           },
           tools: {
             ...tools,
