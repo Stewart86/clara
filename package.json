@@ -19,6 +19,7 @@
     "install-binary": "./install.sh"
   },
   "dependencies": {
+    "@ai-sdk/anthropic": "^1.1.17",
     "@ai-sdk/openai": "^1.2.5",
     "ai": "4.1.61",
     "boxen": "^8.0.1",

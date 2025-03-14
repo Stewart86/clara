@@ -9,6 +9,7 @@ import {
   assistantAgent,
   searchAgent as searchAssistant,
   planner,
+  webSearchAgent,
 } from "../agents/index.js";
 import { writeMemory, createDirectory } from "./memoryWriter.js";
 import { readMemory } from "./memoryReader.js";
@@ -228,6 +229,22 @@ const assistantTool: Tool = tool({
   },
 });
 
+// Tool for web search using OpenAI Responses API
+const webSearchTool: Tool = tool({
+  description:
+    "Search the web for up-to-date information on any topic. Returns current, accurate information from the internet with source citations.",
+  parameters: z.object({
+    query: z
+      .string()
+      .describe(
+        "The search query to find information about on the web. Be specific and clear with your query for best results.",
+      ),
+  }),
+  execute: async ({ query }) => {
+    return await webSearchAgent(query);
+  },
+});
+
 // Tool for editing files
 const editFileTool: Tool = tool({
   description:
@@ -287,6 +304,7 @@ export function getTools(): ToolSet {
     mkdirTool,
     memoryTool,
     assistantTool,
+    webSearchTool,
     editFileTool,
     replaceFileTool,
   };

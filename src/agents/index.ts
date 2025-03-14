@@ -4,6 +4,7 @@ import { memeAgent } from "./meme.js";
 import { punAgent } from "./pun.js";
 import { assistantAgent } from "./assistant";
 import { searchAgent } from "./search";
+import { webSearchAgent } from "./websearch";
 
 export {
   plannerAgent,
@@ -12,4 +13,5 @@ export {
   punAgent,
   assistantAgent,
   searchAgent,
+  webSearchAgent,
 };

@@ -361,6 +361,9 @@ export function evaluateRiskLevel(
       if (command === "git status" || command === "git diff") {
         return "safe";
       }
+      if (command.includes("git commit") || command.includes("git push")) {
+        return "caution";
+      }
       return "caution";
     } else if (explicitCautionCommands.includes(executable)) {
       return "caution";
@@ -563,6 +566,11 @@ export function evaluateRiskLevel(
  * @returns Whether shell injection patterns are found
  */
 function hasShellInjectionPattern(command: string): boolean {
+  // Exception for git commit using heredoc pattern (EOF)
+  if (command.startsWith("git commit") && command.includes("<<'EOF'") && command.includes("EOF\n)")) {
+    return false;
+  }
+  
   return (
     command.includes("$(") || // Command substitution
     command.includes("`") || // Backtick command substitution

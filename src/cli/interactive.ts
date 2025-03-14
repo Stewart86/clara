@@ -52,7 +52,7 @@ function displayTokenUsageSummary() {
 export async function interactive(projectPath: string = process.cwd()) {
   console.log(
     chalk.bold.blue("Clara") +
-    chalk.blue(" - Your AI Assistant for code clarity"),
+      chalk.blue(" - Your AI Assistant for code clarity"),
   );
   console.log(chalk.gray('Type "exit" or press Ctrl+C to quit\n'));
 
@@ -180,22 +180,24 @@ export async function interactive(projectPath: string = process.cwd()) {
 
     while (running) {
       try {
-        console.log(chalk.gray("Tip: Enter a blank line to finish multiline input"));
-        
+        console.log(
+          chalk.gray("Tip: Enter a blank line to finish multiline input"),
+        );
+
         // Custom multiline input handler for getting input
         let lines: string[] = [];
         let firstLine = await rl.question(chalk.green(" > "));
-        
+
         // Set up prompt variable that will be used throughout the rest of the loop
         let prompt = "";
-        
+
         // Check for exit command on the first line
         if (firstLine.toLowerCase() === "exit") {
           prompt = "exit";
         } else {
           // Start collecting lines
           lines.push(firstLine);
-          
+
           // Keep collecting lines until an empty line is entered
           let nextLine = "";
           while (true) {
@@ -204,10 +206,10 @@ export async function interactive(projectPath: string = process.cwd()) {
             if (nextLine.trim() === "") break;
             lines.push(nextLine);
           }
-          
+
           prompt = lines.join("\n");
         }
-        
+
         // Skip displaying empty prompts
         if (prompt.trim()) {
           // Display the user message in a box on the right
@@ -264,10 +266,10 @@ export async function interactive(projectPath: string = process.cwd()) {
 
         // Process the prompt and get streaming response
         const response = await generateText({
-          model: openai("o3-mini"),
+          model: openai.responses("o3-mini"),
           messages,
           providerOptions: {
-            openai: { reasoningEffort: "low" },
+            openai: { reasoningEffort: "high" },
           },
           tools: {
             ...tools,
