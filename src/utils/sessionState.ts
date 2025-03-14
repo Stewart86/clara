@@ -3,6 +3,7 @@
  * Persists data across multiple command invocations within a single CLI session
  */
 import { Interface as ReadlineInterface } from "node:readline";
+import { FileEditApprovalState } from "../tools/fileWriter.js";
 
 // Command approval state
 export interface CommandApprovalState {
@@ -20,6 +21,7 @@ export interface CommandApprovalState {
 export class SessionState {
   private static instance: SessionState;
   public commandApprovals: CommandApprovalState;
+  public fileEditApprovals?: FileEditApprovalState;
   
   // Shared readline interface for user input
   private _sharedReadline: ReadlineInterface | null = null;

@@ -6,6 +6,7 @@ import {
   type CommandApprovalState,
 } from "./sessionState.js";
 import { markdownToTerminal } from "./markdown-to-terminal.js";
+import { generateDiff } from "./diff.js";
 
 export {
   log,
@@ -13,6 +14,7 @@ export {
   getProjectContext,
   getMemoryFilesContext,
   getSessionState,
+  generateDiff,
   type SessionState,
   type CommandApprovalState,
 };

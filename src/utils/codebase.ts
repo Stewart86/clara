@@ -145,6 +145,14 @@ export async function getProjectContext() {
           context += `- ${name}: ${version}\n`;
         });
       }
+
+      // Retrieve project related commands from package.json scripts if available
+      if (packageJson.scripts) {
+        context += "\nProject Scripts (Commands):\n";
+        Object.entries(packageJson.scripts).forEach(([script, command]) => {
+          context += `- ${script}: ${command}\n`;
+        });
+      }
     } catch (e) {
       // Not a Node.js project or package.json not found
     }

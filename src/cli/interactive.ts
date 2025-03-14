@@ -216,8 +216,6 @@ export async function interactive(projectPath: string = process.cwd()) {
         process.stdout.moveCursor(0, -1);
         process.stdout.clearLine(1);
 
-        log(`Raw response: ${text}`, "info");
-
         // Format the text with markdown conversion
         const formattedText = markdownToTerminal(text);
 

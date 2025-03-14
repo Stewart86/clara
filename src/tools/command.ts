@@ -1,4 +1,6 @@
 import { log, getSessionState } from "../utils/index.js";
+import readline from 'readline';
+
 import { $, type ShellError } from "bun";
 
 // Define command security levels
@@ -566,13 +568,28 @@ async function askUserConfirmation(
 ): Promise<{
   approved: boolean;
   rememberChoice: boolean;
+  feedback?: string;
 }> {
-  // Display command and risk level
+  // Display command and risk level with better formatting
   console.log(
-    `\x1b[1;${riskLevel === "dangerous" ? "31" : "33"}m${riskLevel === "dangerous" ? "DANGEROUS COMMAND" : "Command Requires Approval"}\x1b[0m`,
+    `\n\x1b[1;${riskLevel === "dangerous" ? "31" : "33"}m${riskLevel === "dangerous" ? "DANGEROUS COMMAND" : "Command Requires Approval"}\x1b[0m`,
   );
-  console.log(`Command: ${command}`);
-
+  
+  // Display the command with syntax highlighting-like formatting
+  console.log(`\n\x1b[1;36mProposed Command:\x1b[0m`);
+  console.log(`\x1b[1;37m$ ${command}\x1b[0m`);
+  
+  // Display risk level with visual indicator
+  let riskIndicator = "";
+  if (riskLevel === "dangerous") {
+    riskIndicator = "\x1b[31m■■■\x1b[0m High Risk";
+  } else if (riskLevel === "caution") {
+    riskIndicator = "\x1b[33m■■ \x1b[0m Medium Risk";
+  } else {
+    riskIndicator = "\x1b[32m■  \x1b[0m Low Risk";
+  }
+  console.log(`\n\x1b[1mRisk Level:\x1b[0m ${riskIndicator}`);
+  
   // Get the session state to check for shared readline
   const sessionState = getSessionState();
   const sharedReadline = sessionState.getSharedReadline();
@@ -588,8 +605,8 @@ async function askUserConfirmation(
     // Create a simple question function using the shared readline
     const ask = (prompt: string): Promise<string> => {
       return new Promise((resolve) => {
-        process.stdout.write(prompt);
-
+        console.log(prompt);
+        
         const onLine = (line: string) => {
           // Clean up listener and resolve with answer
           sharedReadline.removeListener("line", onLine);
@@ -605,23 +622,38 @@ async function askUserConfirmation(
     };
 
     try {
-      // Ask for command approval
-      const answer = await ask("Approve this command? (y/n): ");
-      const approved =
-        answer.toLowerCase() === "y" || answer.toLowerCase() === "yes";
-
+      // Ask for command approval with possibility for feedback on rejection
+      const answer = await ask("\n\x1b[1;33mApprove this command? (y/n or provide feedback if rejecting): \x1b[0m");
+      
+      // Check if the answer starts with y/yes for approval
+      const approved = answer.toLowerCase() === "y" || answer.toLowerCase() === "yes" || 
+                      answer.toLowerCase().startsWith("y ");
+      
+      // Extract feedback if provided (anything after the y/n)
+      let feedback = "";
+      if (!approved && answer.length > 1 && answer.toLowerCase() !== "no") {
+        // If it starts with "n" or "no", extract everything after that
+        if (answer.toLowerCase().startsWith("n ") || answer.toLowerCase().startsWith("no ")) {
+          const match = answer.match(/^(n|no)\s+(.*)/i);
+          feedback = match ? match[2] : answer;
+        } else {
+          // Otherwise, assume the entire response is feedback
+          feedback = answer;
+        }
+      }
+      
       // If approved, ask about remembering the choice
       let rememberChoice = false;
       if (approved) {
         const rememberAnswer = await ask(
-          "Remember this choice for the rest of the session? (y/n): ",
+          "Remember this choice for the rest of the session? (y/n): "
         );
-        rememberChoice =
+        rememberChoice = 
           rememberAnswer.toLowerCase() === "y" ||
           rememberAnswer.toLowerCase() === "yes";
       }
-
-      return { approved, rememberChoice };
+      
+      return { approved, rememberChoice, feedback };
     } finally {
       // Restore previous readline state
       if (!wasListening) {
@@ -632,22 +664,37 @@ async function askUserConfirmation(
     // Fallback to Bun's built-in prompt - for standalone tests
     // This should only happen when running command tests directly
     console.log("No shared readline available, using fallback prompt.");
-    const answer = prompt("Approve this command? (y/n): ") || "n";
-    const approved =
-      answer.toLowerCase() === "y" || answer.toLowerCase() === "yes";
-
+    console.log("\n\x1b[1;33mApprove this command? (y/n or provide feedback if rejecting): \x1b[0m");
+    const answer = prompt("") || "n";
+    
+    // Check if the answer starts with y/yes for approval
+    const approved = answer.toLowerCase() === "y" || answer.toLowerCase() === "yes" || 
+                    answer.toLowerCase().startsWith("y ");
+    
+    // Extract feedback if provided (anything after the y/n)
+    let feedback = "";
+    if (!approved && answer.length > 1 && answer.toLowerCase() !== "no") {
+      // If it starts with "n" or "no", extract everything after that
+      if (answer.toLowerCase().startsWith("n ") || answer.toLowerCase().startsWith("no ")) {
+        const match = answer.match(/^(n|no)\s+(.*)/i);
+        feedback = match ? match[2] : answer;
+      } else {
+        // Otherwise, assume the entire response is feedback
+        feedback = answer;
+      }
+    }
+    
     // If approved, ask about remembering the choice
     let rememberChoice = false;
     if (approved) {
-      const rememberAnswer =
-        prompt("Remember this choice for the rest of the session? (y/n): ") ||
-        "n";
+      console.log("Remember this choice for the rest of the session? (y/n): ");
+      const rememberAnswer = prompt("") || "n";
       rememberChoice =
         rememberAnswer.toLowerCase() === "y" ||
         rememberAnswer.toLowerCase() === "yes";
     }
-
-    return { approved, rememberChoice };
+    
+    return { approved, rememberChoice, feedback };
   }
 }
 
@@ -680,6 +727,11 @@ export async function secureCommand(command: string): Promise<string> {
       `[Command] Running previously approved command pattern: ${cleanCommand}`,
       "system",
     );
+    
+    // Even for pre-approved commands, show them in a formatted way
+    console.log(`\n\x1b[1;36mPre-approved Command:\x1b[0m`);
+    console.log(`\x1b[1;37m$ ${cleanCommand}\x1b[0m`);
+    
     return executeCommand(cleanCommand);
   }
 
@@ -699,7 +751,7 @@ export async function secureCommand(command: string): Promise<string> {
   }
 
   // For caution and dangerous commands, get user confirmation
-  const { approved, rememberChoice } = await askUserConfirmation(
+  const { approved, rememberChoice, feedback } = await askUserConfirmation(
     cleanCommand,
     riskLevel,
   );
@@ -715,8 +767,12 @@ export async function secureCommand(command: string): Promise<string> {
 
     return executeCommand(cleanCommand);
   } else {
-    log(`[Command] User rejected command: ${cleanCommand}`, "system");
-    return `Command execution cancelled or rejected by user`;
+    log(`[Command] User rejected command: ${cleanCommand}${feedback ? `: ${feedback}` : ''}`, "system");
+    if (feedback) {
+      return `Command execution rejected: ${feedback}`;
+    } else {
+      return `Command execution cancelled by user`;
+    }
   }
 }
 

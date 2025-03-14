@@ -11,6 +11,7 @@ import {
 } from "../agents/index.js";
 import { writeMemory, createDirectory } from "./memoryWriter.js";
 import { readMemory } from "./memoryReader.js";
+import { editFile, replaceFile } from "./fileWriter.js";
 import {
   resetMemoryReadStatus,
   getMemoryReadStatus,
@@ -223,6 +224,43 @@ const assistantTool: Tool = tool({
   },
 });
 
+// Tool for editing files
+const editFileTool: Tool = tool({
+  description:
+    "Edit a file by replacing a specific string with a new one. Requires user approval before making changes. Only works on files in the current working directory or Clara's memory directory. IMPORTANT: If the user rejects the edit, do not immediately retry with the same change. Instead, ask for more specific guidance or alternatives. Users can provide feedback with their rejection to guide you.",
+  parameters: z.object({
+    filePath: z
+      .string()
+      .describe("The path to the file to edit (can be relative to current directory)"),
+    oldString: z
+      .string()
+      .describe("The exact string to replace. Must be unique within the file. For new files, use an empty string."),
+    newString: z
+      .string()
+      .describe("The new string to insert in place of the old string (or entire file content for new files)"),
+  }),
+  execute: async ({ filePath, oldString, newString }) => {
+    return await editFile(filePath, oldString, newString);
+  },
+});
+
+// Tool for completely replacing/creating files
+const replaceFileTool: Tool = tool({
+  description:
+    "Completely replace or create a file with new content. Requires user approval before making changes. Only works on files in the current working directory or Clara's memory directory. IMPORTANT: If the user rejects the changes, do not immediately retry with the same content. Instead, ask for more specific guidance or alternatives. Users can provide feedback with their rejection to guide you.",
+  parameters: z.object({
+    filePath: z
+      .string()
+      .describe("The path to the file to create or replace (can be relative to current directory)"),
+    content: z
+      .string()
+      .describe("The new content for the file"),
+  }),
+  execute: async ({ filePath, content }) => {
+    return await replaceFile(filePath, content);
+  },
+});
+
 // Get all available tools
 export function getTools(): ToolSet {
   return {
@@ -238,6 +276,8 @@ export function getTools(): ToolSet {
     mkdirTool,
     memoryTool,
     assistantTool,
+    editFileTool,
+    replaceFileTool,
   };
 }
 

@@ -12,9 +12,15 @@ type LogType = "system" | "info" | "warning" | "error" | "success";
  */
 export function log(message: string, type: LogType = "info"): void {
   if (type === "system") {
-    process.stdout.clearLine(0);
-    process.stdout.cursorTo(0);
-    process.stdout.write(`${chalk.gray(message)}`);
+    // Check if we're in a TTY environment with clearLine available
+    if (process.stdout.isTTY && process.stdout.clearLine && process.stdout.cursorTo) {
+      process.stdout.clearLine(0);
+      process.stdout.cursorTo(0);
+      process.stdout.write(`${chalk.gray(message)}`);
+    } else {
+      // Fallback for non-TTY environments
+      console.log(chalk.gray(message));
+    }
     return;
   }
 
