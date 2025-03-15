@@ -5,6 +5,7 @@ import { z } from "zod";
 import { searchFiles } from "../tools/search";
 import type { OpenAIChatModelId } from "@ai-sdk/openai/internal";
 import { TokenTracker } from "../utils/index.js";
+import { listDirectory } from "../tools/index.js";
 
 const systemPrompt = `You are a commandline search specialist agent integrated into Clara, designed to find files and code efficiently. You are well versed in many different programming languages. You understand the folder and file structure of some of the most common programming framework, have a general idea on where to look for things. You are an expert at using terminal search tools like ripgrep (rg) and fd. You should only return a comphensive list of files you have found.
 
@@ -51,14 +52,28 @@ Follow these best practices for file searching:
    - Exclude build, dist, and other output directories
    - Skip searching in hidden folders like .vscode, .idea, etc.
 
-7. Do search in:
+7. Directory listing:
+   - Use the listDirectory tool to quickly list contents of a directory.
+   - The tool returns relative paths and appends a separator to directories.
+   - It efficiently skips hidden directories and large file sets.
+
+8. Do search in:
    - Search in files used specifically for AI memory / knowledge base
    - files / folders like CLAUDE.md, .cursorrules, or .github/copilot-instructions.md
    - folders like docs/ might contain useful information
 
-8. Response considerations:
+9. Response considerations:
    - Always include the full path of the file
    - Ensure the response is comprehensive and accurate
+
+10. Tool use guidelines:
+   - IMPORTANT: Always use the search tool when performing file or content searches
+   - When using the search tool, provide the pattern parameter as a string without quotes
+   - Specify the tool parameter as either "rg" for content searches or "fd" for filename searches
+   - For listDirectoryTool, provide both initialPath and directory parameters
+   - Chain multiple tool calls when needed to refine your search results
+   - When search returns no results, try alternative patterns with the tool
+   - Use tools iteratively to explore the codebase structure
 `;
 
 /**
@@ -70,7 +85,7 @@ Follow these best practices for file searching:
  */
 export async function searchAgent(prompt: string): Promise<string> {
   try {
-    const tool: Tool = aiTool({
+    const search: Tool = aiTool({
       description:
         "Search for files in the project using a specialized search agent that can use advanced rg and fd commands. Always use this tool for any file searches.",
       parameters: z.object({
@@ -85,6 +100,18 @@ export async function searchAgent(prompt: string): Promise<string> {
         return await searchFiles(pattern, tool);
       },
     });
+    const listDirectoryTool: Tool = aiTool({
+      description: "List all files in a directory",
+      parameters: z.object({
+        initialPath: z
+          .string()
+          .describe("The initial path to start the search"),
+        directory: z.string().describe("The directory to search in"),
+      }),
+      execute: async ({ initialPath, directory }) => {
+        return listDirectory(initialPath, directory);
+      },
+    });
 
     const model: OpenAIChatModelId = "gpt-4o-mini";
     log(`[SearchAgent] Generating response with ${model}`, "system");
@@ -92,7 +119,8 @@ export async function searchAgent(prompt: string): Promise<string> {
     const response = await generateText({
       model: openai(model),
       tools: {
-        search: tool,
+        search,
+        listDirectoryTool,
       },
       toolChoice: "auto",
       maxSteps: 20,

@@ -8,7 +8,6 @@ import {
   punAgent,
   assistantAgent,
   searchAgent as searchAssistant,
-  planner,
   webSearchAgent,
 } from "../agents/index.js";
 import { writeMemory, createDirectory } from "./memoryWriter.js";
@@ -24,6 +23,7 @@ import {
 import { log } from "../utils/index.js";
 import { commandPrompt } from "../prompts/command-prompt.js";
 import { plannerAgent } from "../agents/planner.js";
+import { listDirectory } from "./listDirectory.js";
 
 // Tool for writing files (restricted to ~/.config/clara/ directory)
 const writeMemoryTool: Tool = tool({
@@ -317,4 +317,5 @@ export {
   setMemoryReadStatus,
   setProjectIdentifier,
   extractProjectIdentifier,
+  listDirectory,
 };
