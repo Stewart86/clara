@@ -85,12 +85,12 @@ const memoryTool: Tool = tool({
 // Tool for specialized search using the search agent
 const searchAgent: Tool = tool({
   description:
-    "Search for files in the project using a specialized search agent that can use advanced rg and fd commands. Always use this tool for any keyword searches.",
+    "Search for files or folder in the project. Always use this tool for any keyword or content relavent searches.",
   parameters: z.object({
     prompt: z
       .string()
       .describe(
-        'Detailed description of what you are searching for. Be specific about file types, patterns, or content you need. For example: "Find all React components that use authentication", "Search for files handling cart promotions", etc.',
+        'content or keyword of what you are searching for. Be specific about file types, patterns, or content you need.',
       ),
   }),
   execute: async ({ prompt }) => {
@@ -111,15 +111,18 @@ const readFileTool: Tool = tool({
       .describe("Directory to search in, defaults to current directory"),
     lineRange: z
       .object({
-        start: z.number().describe("Start line number"),
-        end: z.number().describe("End line number"),
+        start: z.number().describe("Start line number. Special case: Use start=0 to automatically read entire file regardless of size"),
+        end: z.number().describe("End line number. Can be set to 0 to indicate line 0 in the file (unlike start=0 which has special behavior)"),
       })
       .describe(
-        'Optional range of lines to read, e.g. { "start": 10, "end": 20 }',
+        'Optional range of lines to read, e.g. { "start": 10, "end": 20 }. Special case: Using {"start": 0} will read the entire file regardless of size. End can be set to 0 as a normal line number.',
       ),
+    readEntireFile: z
+      .boolean()
+      .describe("Force reading the entire file, even if it's large")
   }),
-  execute: async ({ filePath, directory, lineRange }) => {
-    return await readFile(filePath, directory || ".", lineRange ?? null);
+  execute: async ({ filePath, directory, lineRange, readEntireFile }) => {
+    return await readFile(filePath, directory || ".", lineRange ?? null, readEntireFile ?? false);
   },
 });
 
@@ -245,6 +248,21 @@ const webSearchTool: Tool = tool({
   },
 });
 
+// Tool for the AI to explain what it's doing or about to do
+const explainTool: Tool = tool({
+  description: 
+    "Use this tool to explain your reasoning, intentions, or the purpose of using specific tools. This helps users understand your thought process without affecting the system.",
+  parameters: z.object({
+    explanation: z
+      .string()
+      .describe("The explanation of what you're about to do or why you're using a specific tool"),
+  }),
+  execute: async ({ explanation }) => {
+    log(`💡 ${explanation}`, "info");
+    return "Explanation provided to user.";
+  },
+});
+
 // Tool for editing files
 const editFileTool: Tool = tool({
   description:
@@ -307,6 +325,7 @@ export function getTools(): ToolSet {
     webSearchTool,
     editFileTool,
     replaceFileTool,
+    explainTool,
   };
 }
 

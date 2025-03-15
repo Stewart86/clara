@@ -10,12 +10,14 @@ import { SETTING_DIR } from "../../constants.js";
  * @param filePath Path to read
  * @param directory Optional directory to resolve relative paths (defaults to current directory)
  * @param lineRange Optional range of lines to read (format: {start: number, end: number})
+ * @param readEntireFile Optional flag to force reading the entire file, even if it's large
  * @returns File contents as string
  */
 export async function readFile(
   filePath: string,
   directory: string = ".",
   lineRange?: { start: number; end: number },
+  readEntireFile: boolean = false,
 ): Promise<string> {
   try {
     // Special handling for memory files
@@ -41,7 +43,7 @@ export async function readFile(
         const stats = await fs.stat(memoryPath);
         if (stats.isFile()) {
           log(`[Read] Found file in memory: ${memoryPath}`, "system");
-          return await readFileContent(memoryPath, lineRange);
+          return await readFileContent(memoryPath, lineRange, readEntireFile);
         }
       } catch (error) {
         // Memory file doesn't exist, continue with normal path
@@ -57,7 +59,7 @@ export async function readFile(
     try {
       const stats = await fs.stat(absolutePath);
       if (stats.isFile()) {
-        return await readFileContent(absolutePath, lineRange);
+        return await readFileContent(absolutePath, lineRange, readEntireFile);
       } else {
         return `Error: ${absolutePath} exists but is not a file.`;
       }
@@ -77,18 +79,26 @@ export async function readFile(
  * Read the content of a file once the path is confirmed
  * @param filePath Absolute path to the file
  * @param lineRange Optional range of lines to read (format: {start: number, end: number})
+ * @param readEntireFile Optional flag to force reading the entire file, even if it's large
  * @returns File contents as string
  */
 async function readFileContent(
   filePath: string,
   lineRange?: { start: number; end: number },
+  readEntireFile: boolean = false,
 ): Promise<string> {
   $.throws(true); // Throw an error if the command fails
   try {
     log(`[Read] Opening file: ${filePath}`, "system");
-
-    // If line range is specified, use bat or another method to read specific lines
-    if (lineRange) {
+    
+    // Special case: If lineRange.start is 0, treat it as a request to read the entire file
+    if (lineRange && lineRange.start === 0) {
+      readEntireFile = true;
+      log(`[Read] Line range starts with 0, enabling full file read`, "system");
+      // Proceed to full file reading below (we'll skip the lineRange handling)
+    }
+    // If line range is specified and not the special case (start=0), use bat or another method to read specific lines
+    else if (lineRange) {
       try {
         log(
           `[Read] Reading lines ${lineRange.start}-${lineRange.end || "end"} from ${filePath}`,
@@ -149,8 +159,8 @@ async function readFileContent(
       const size = initFile.size;
       log(`[Read] File size: ${size} bytes`, "system");
 
-      // Check if the file is too large
-      if (size > 1000000) {
+      // Check if the file is too large and readEntireFile is not set
+      if (size > 1000000 && !readEntireFile) {
         // over 1MB
         log(
           `[Read] File is large (${size} bytes), reading first and last parts`,
@@ -164,9 +174,10 @@ async function readFileContent(
         return `${start}\n\n[...file too large (${size} bytes), showing beginning and end...]\n\n${end}`;
       }
 
-      // For normal sized files, read the entire content
+      // For normal sized files or when readEntireFile is true, read the entire content
       const content = await initFile.text();
-      log(`[Read] Successfully read ${content.length} bytes`, "system");
+      const relativeFile = path.relative(process.cwd(), filePath);
+      log(`[Read] Successfully read ${content.length} bytes from ${relativeFile}`, "system");
       return content;
     } catch (error) {
       if (error instanceof Error) {
