@@ -24,19 +24,25 @@ Clara runs entirely via a command line interface. It can be used interactively o
 
 ## Agents
 
-Clara is built using a suite of specialized agents that work together to analyze and explain code:
+Clara is built using an adaptive orchestration architecture with specialized agents that work together to analyze and explain code:
 
-1. **Thinker Agent**: Organizes complex thoughts and outlines potential solutions.
-2. **Parser Agent**: Analyzes code snippets to understand structure and functionality.
-3. **Meme Agent**: Injects light-hearted humor through relatable programming memes.
-4. **Pun Agent**: Crafts programming-related puns to add a fun twist to explanations.
-5. **Search Agent**: Efficiently locates code patterns and files within the project.
-6. **Assistant Agent**: Provides comprehensive assistance by managing and coordinating the other agents.
+1. **Orchestrator Agent**: Coordinates the entire workflow, creating detailed execution plans with dependencies between steps. Uses OpenAI's o3-mini model for efficient planning.
 
-- **End-to-End Code Investigation**: Clara methodically reads, parses, and interprets code, piecing together the logic and purpose behind every module or function.
-- **Layman-Friendly Explanations**: Clara transforms technical jargon into accessible language, bridging the gap between complex code logic and business strategy.
-- **Business-Savvy Insights**: With a strong business focus, Clara highlights how specific code components impact overall business functions and operational efficiency.
-- **Engaging and Casual Interaction**: Clara maintains a professional yet approachable demeanor, occasionally using humor to make technical discussions more engaging.
+2. **Search Agent**: Efficiently locates code patterns and files with incremental search strategies and result caching. Optimized for finding precisely what you need in large codebases.
+
+3. **Memory Agent**: Manages Clara's knowledge system with automatic categorization, metadata tagging, and relationship tracking between information.
+
+4. **Command Agent**: Safely executes shell commands with enhanced security validation, result parsing, and error recovery strategies.
+
+5. **Verification Agent**: Validates outputs for accuracy, performs fact-checking against the codebase, and suggests corrections when issues are found.
+
+6. **User Intent Agent**: Deeply analyzes requests to identify user's true objectives, implicit needs, and priority information.
+
+7. **Meme Agent**: Injects light-hearted humor through relatable programming memes.
+
+8. **Pun Agent**: Crafts programming-related puns to add a fun twist to explanations.
+
+The agent system includes a comprehensive context management system that maintains workflow state, tracks resources, and prevents redundant operations.
 
 ## Prerequisites
 
@@ -208,11 +214,13 @@ bun test:pentest
 
 ## Memory System
 
-Clara uses a plaintext-based memory system stored in the user's home directory:
+Clara uses an enhanced plaintext-based memory system with structured metadata and relationship tracking:
 
 - Base location: `~/.config/clara/`
 - Project-specific memories organized by current working directory paths
-- Markdown format for all stored information
+- Markdown format with YAML frontmatter for metadata
+- Advanced indexing layer for efficient search and retrieval
+- Relationship mapping between related memory files
 - Topic-based organization with folders for:
   - **Codebase**: Structure, patterns, conventions
   - **Users**: Preferences, common questions
@@ -220,35 +228,57 @@ Clara uses a plaintext-based memory system stored in the user's home directory:
   - **Technical**: Implementation details, architecture
   - **Business**: Value propositions, stakeholder impacts
 
-The memory system enables Clara to provide more personalized and context-aware assistance across sessions.
+Each memory file includes structured metadata:
+```
+---
+title: Authentication Flow
+created: 2023-04-20T14:53:00Z
+updated: 2023-05-15T09:30:00Z
+tags: [auth, security, jwt, oauth]
+related: [technical/jwt.md, technical/oauth.md]
+summary: Overview of the authentication process using JWT tokens and OAuth 2.0
+importance: high
+---
+
+# Authentication Flow
+
+The authentication system uses JWT tokens with OAuth 2.0...
+```
+
+The memory system enables Clara to maintain context across sessions, recognize relationships between topics, and provide more personalized assistance.
 
 ## Architecture
 
-Clara is built with a multi-agent architecture:
+Clara is built with an adaptive orchestration architecture featuring context management:
 
 ### Core Components
 
-- **Main Interface**: Orchestrates agents and tools, maintains conversation context
+- **Context Management System**: Maintains complete workflow state and history
+- **Orchestrator Agent**: Creates and executes plans with step dependencies
+- **Specialized Worker Agents**: Task-specific agents optimized for particular functions
 - **CLI Layer**: Parses commands and options, manages user interactions
 
 ### Agents
 
-- **Core Clara**: Main interface and orchestration
-- **Thinker Agent**: Deep reasoning and complex problem solving (using OpenAI o1)
-- **Parser Agent**: Specialized in code understanding (using OpenAI 4o-mini)
+- **Orchestrator Agent**: Coordinates workflow, creates execution plans with dependency management (using OpenAI o3-mini)
+- **Search Agent**: Finds files and code with incremental search strategies (using OpenAI gpt-4o-mini)
+- **Memory Agent**: Manages knowledge with metadata tagging and relationship tracking (using OpenAI o3-mini)
+- **Command Agent**: Executes shell commands with security validation and result parsing (using OpenAI o3-mini)
+- **Verification Agent**: Validates outputs for accuracy against the codebase (using OpenAI o3-mini)
+- **User Intent Agent**: Analyzes requests to identify true objectives and priorities (using OpenAI o3-mini)
 - **Meme Agent**: Generates programming-related memes
 - **Pun Agent**: Creates programming puns and jokes
-- **Search Agent**: Specialized in finding relevant information
 
 ### Tools
 
-Clara leverages multiple tools to interact with codebases:
+Clara leverages context-aware tools that maintain state across operations:
 
-- **Search Tool**: Find files and code patterns with regex support
-- **File Reader**: Read and parse code files
-- **Command Tool**: Execute shell commands with security checks
-- **Memory Tools**: Read/write to persistent storage
+- **Search Tool**: Find files and code patterns with regex support, progressive search strategies, and result caching
+- **File Reader**: Read and parse code files with line range control
+- **Command Tool**: Execute shell commands with security checks and result interpretation
+- **Memory Tools**: Enhanced read/write to persistent storage with metadata and indexing
 - **Analysis Tools**: Parse code structure and relationships
+- **Context Tools**: Maintain and share execution state between agents
 
 #### Command Security
 
@@ -312,6 +342,28 @@ Clara is designed to be extensible with custom agents and tools:
 1. Create a new agent in `src/agents/`
 2. Implement the corresponding tool in `src/tools/`
 3. Register the new tool in `src/tools/index.ts`
+
+### Experimental Features
+
+Clara includes several experimental features that can be enabled or disabled:
+
+```bash
+# List available experimental features
+clara feature list
+
+# Enable a feature
+clara feature enable multi-agent-system
+
+# Disable a feature
+clara feature disable memory-indexing
+```
+
+Available experimental features:
+
+- **multi-agent-system**: Enables the adaptive orchestration architecture (default: enabled)
+- **memory-indexing**: Enables advanced memory indexing and relationship tracking
+- **agent-activity**: Shows real-time agent activity in the terminal (default: enabled)
+- **context-sharing**: Enables context sharing between different agents (default: enabled)
 
 ## Troubleshooting
 
