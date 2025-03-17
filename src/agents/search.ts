@@ -5,7 +5,8 @@ import { searchFiles } from "../tools/search.js";
 import { listDirectory } from "../tools/index.js";
 import { BaseAgent, type AgentConfig } from "./base.js";
 
-const getSearchAgentSystemPrompt = (): string => `You are a commandline search specialist agent integrated into Clara, designed to find files and code efficiently. You are well versed in many different programming languages. You understand the folder and file structure of some of the most common programming framework, have a general idea on where to look for things. You are an expert at using terminal search tools like ripgrep (rg) and fd. You should only return a comphensive list of files you have found.
+const getSearchAgentSystemPrompt =
+  (): string => `You are a commandline search specialist agent integrated into Clara, designed to find files and code efficiently. You are well versed in many different programming languages. You understand the folder and file structure of some of the most common programming framework, have a general idea on where to look for things. You are an expert at using terminal search tools like ripgrep (rg) and fd. You should only return a comphensive list of files you have found.
 
 **IMPORTANT**: DO NOT search with genetic patterns like "*" or "**" as it can be very slow and resource intensive.
 
@@ -101,7 +102,7 @@ export class SearchAgent extends BaseAgent {
         return await searchFiles(pattern, tool);
       },
     });
-    
+
     const listDirectoryTool: Tool = aiTool({
       description: "List all files in a directory",
       parameters: z.object({
@@ -116,17 +117,16 @@ export class SearchAgent extends BaseAgent {
     });
 
     const config: AgentConfig = {
-      name: 'search',
-      description: 'File and Content Search Specialist Agent',
-      provider: 'openai',
-      model: 'o4-mini',
+      name: "search",
+      description: "File and Content Search Specialist Agent",
+      provider: "openai",
+      model: "gpt-4o-mini",
       systemPrompt: getSearchAgentSystemPrompt(),
       tools: {
         search: searchTool,
-        listDirectoryTool
+        listDirectoryTool,
       },
       maxSteps: 20,
-      reasoningEffort: 'medium',
     };
 
     super(config);
@@ -137,54 +137,126 @@ export class SearchAgent extends BaseAgent {
    */
   public async search(query: string): Promise<string> {
     // Initialize search operation in context
-    const context = this.contextManager.getContext() || this.contextManager.createContext();
-    log(`[SearchAgent] Processing query: ${query} (context ID: ${context.requestId})`, "system");
-    
+    const context =
+      this.contextManager.getContext() || this.contextManager.createContext();
+    log(
+      `[SearchAgent] Processing query: ${query} (context ID: ${context.requestId})`,
+      "system",
+    );
+
     // Check if we've already searched for this exact query
     if (context.filesSearched.includes(query)) {
-      log(`[SearchAgent] This query has been searched before, retrieving from context`, "system");
+      log(
+        `[SearchAgent] This query has been searched before, retrieving from context`,
+        "system",
+      );
       const previousResult = this.contextManager.getResult(`search:${query}`);
       if (previousResult) {
         return previousResult;
       }
     }
-    
+
     // Execute the search
     const result = await this.execute(query);
-    
+
+    // Create a concise version (max 3 paragraphs) if the result is too long
+    const conciseResult = await this.createConciseResult(result, query);
+
     // Store result in context
     this.contextManager.recordFileSearch(query);
-    this.contextManager.storeResult(`search:${query}`, result);
-    
-    return result;
+    this.contextManager.storeResult(`search:${query}`, conciseResult);
+
+    return conciseResult;
+  }
+
+  /**
+   * Create a concise version of a search result
+   */
+  private async createConciseResult(
+    result: string,
+    query: string,
+  ): Promise<string> {
+    // If the result is already short, return it as is
+    if (result.length < 1000) {
+      return result;
+    }
+
+    log(
+      `[SearchAgent] Creating concise summary of search results (${result.length} chars)`,
+      "system",
+    );
+
+    try {
+      // Create a summarization prompt
+      const summarizationPrompt = `
+I need a concise summary (maximum 3 paragraphs) of these search results for the query: "${query}"
+
+${result}
+
+Focus only on the most important findings. The summary should be brief but informative.
+`;
+
+      // Execute the summarization using our own agent to save a round-trip
+      const summarizedResult = await this.execute(summarizationPrompt);
+
+      // Return the summarized result if it's shorter
+      if (summarizedResult.length < result.length) {
+        log(
+          `[SearchAgent] Created concise summary (${summarizedResult.length} chars)`,
+          "system",
+        );
+        return summarizedResult;
+      } else {
+        // If something went wrong and the summary is longer, return original with a note
+        return (
+          result.substring(0, 1000) + "\n\n[Results truncated for brevity...]"
+        );
+      }
+    } catch (error) {
+      // If summarization fails, truncate the result
+      log(`[SearchAgent] Failed to create concise summary: ${error}`, "error");
+      return (
+        result.substring(0, 1000) + "\n\n[Results truncated for brevity...]"
+      );
+    }
   }
 
   /**
    * Perform an incremental search with progressive refinement
    */
-  public async incrementalSearch(query: string, maxIterations: number = 3): Promise<string> {
+  public async incrementalSearch(
+    query: string,
+    maxIterations: number = 3,
+  ): Promise<string> {
     // Initialize search operation in context
-    const context = this.contextManager.getContext() || this.contextManager.createContext();
+    const context =
+      this.contextManager.getContext() || this.contextManager.createContext();
     log(`[SearchAgent] Starting incremental search for: ${query}`, "system");
-    
+
     // First attempt with original query
     let result = await this.search(query);
-    
+
     // Check if we got results and need to refine
     if (result.includes("No files found") || result.includes("No results")) {
-      log(`[SearchAgent] Initial search returned no results, trying broader patterns`, "system");
-      
+      log(
+        `[SearchAgent] Initial search returned no results, trying broader patterns`,
+        "system",
+      );
+
       // Try broadening with a more generic prompt
       const broaderQuery = `I need to find files related to ${query}. Can you try a broader search approach with alternative terms and patterns?`;
       result = await this.search(broaderQuery);
     } else if (result.length > 10000) {
-      log(`[SearchAgent] Initial search returned too many results, trying to narrow down`, "system");
-      
+      log(
+        `[SearchAgent] Initial search returned too many results, trying to narrow down`,
+        "system",
+      );
+
       // Try narrowing with a more specific prompt
       const narrowerQuery = `I found too many results for ${query}. Can you help me narrow down the search with more specific patterns?`;
       result = await this.search(narrowerQuery);
     }
-    
+
     return result;
   }
 }
@@ -196,12 +268,8 @@ export function createSearchAgent(): SearchAgent {
   return new SearchAgent();
 }
 
-/**
- * Static factory method for creating search agent
- */
-SearchAgent.create = function(): SearchAgent {
-  return new SearchAgent();
-};
+// Static factory method is defined separately as a class method
+// instead of as a property of the class constructor to avoid TypeScript errors
 
 /**
  * Legacy function for backward compatibility

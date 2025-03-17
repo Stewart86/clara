@@ -68,9 +68,9 @@ const CommandResultSchema = z.object({
   summary: z.string().describe("A summary of what the command did or attempted to do"),
   interpretation: z.string().describe("Explanation of the command output"),
   keyFindings: z.array(z.string()).describe("Key information extracted from the output"),
-  errors: z.array(z.string()).optional().describe("Any errors encountered during execution"),
-  warnings: z.array(z.string()).optional().describe("Any warnings or potential issues"),
-  nextSteps: z.array(z.string()).optional().describe("Suggested next steps based on the command result")
+  errors: z.array(z.string()).describe("Any errors encountered during execution"),
+  warnings: z.array(z.string()).describe("Any warnings or potential issues"),
+  nextSteps: z.array(z.string()).describe("Suggested next steps based on the command result")
 });
 
 /**

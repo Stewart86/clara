@@ -4,7 +4,8 @@ import {
   CommandAgent, 
   VerificationAgent, 
   UserIntentAgent,
-  SearchAgent 
+  SearchAgent,
+  createSearchAgent
 } from "../agents/index.js";
 
 // Test worker agents
@@ -35,7 +36,7 @@ test("Agent factory methods should return agent instances", () => {
   const commandAgent = CommandAgent.create();
   const verificationAgent = VerificationAgent.create();
   const userIntentAgent = UserIntentAgent.create();
-  const searchAgent = SearchAgent.create();
+  const searchAgent = createSearchAgent();
   
   expect(memoryAgent).toBeInstanceOf(MemoryAgent);
   expect(commandAgent).toBeInstanceOf(CommandAgent);

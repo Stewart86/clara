@@ -47,7 +47,7 @@ export interface AgentContext {
  */
 export interface AgentPlan {
   taskCategory: string;
-  severity?: "critical" | "major" | "minor";
+  severity?: "critical" | "major" | "minor" | "none";
   steps: Array<{
     id: number;
     description: string;
