@@ -85,12 +85,12 @@ const readMemoryTool: Tool = tool({
 // Tool for advanced file and content search within the codebase
 const searchAgent: Tool = tool({
   description:
-    "Performs powerful searches across the codebase using a specialized agent with access to advanced search commands (rg, fd). ALWAYS use this tool when searching for files, code patterns, or specific content within the project.",
+    "Search for files or folder in the project. Always use this tool for any keyword or content relavent searches.",
   parameters: z.object({
     prompt: z
       .string()
       .describe(
-        'Detailed description of what you need to find. Be specific about file types, patterns, or content. Examples: "Find all React components that use authentication", "Locate files handling cart promotions", "Search for functions that process payment data".',
+        'content or keyword of what you are searching for. Be specific about file types, patterns, or content you need.',
       ),
   }),
   execute: async ({ prompt }) => {
@@ -113,15 +113,18 @@ const readFileTool: Tool = tool({
       .describe("Directory to search in, defaults to current directory"),
     lineRange: z
       .object({
-        start: z.number().describe("Start line number (1-based indexing)"),
-        end: z.number().describe("End line number (inclusive)"),
+        start: z.number().describe("Start line number. Special case: Use start=0 to automatically read entire file regardless of size"),
+        end: z.number().describe("End line number. Can be set to 0 to indicate line 0 in the file (unlike start=0 which has special behavior)"),
       })
       .describe(
-        'Optional range of lines to read for large files, e.g. { "start": 10, "end": 30 }',
+        'Optional range of lines to read, e.g. { "start": 10, "end": 20 }. Special case: Using {"start": 0} will read the entire file regardless of size. End can be set to 0 as a normal line number.',
       ),
+    readEntireFile: z
+      .boolean()
+      .describe("Force reading the entire file, even if it's large")
   }),
-  execute: async ({ filePath, directory, lineRange }) => {
-    return await readFile(filePath, directory || ".", lineRange ?? null);
+  execute: async ({ filePath, directory, lineRange, readEntireFile }) => {
+    return await readFile(filePath, directory || ".", lineRange ?? null, readEntireFile ?? false);
   },
 });
 
@@ -237,7 +240,22 @@ const webSearchTool: Tool = tool({
   },
 });
 
-// Tool for making targeted edits to files with user approval
+// Tool for the AI to explain what it's doing or about to do
+const explainTool: Tool = tool({
+  description: 
+    "Use this tool to explain your reasoning, intentions, or the purpose of using specific tools. This helps users understand your thought process without affecting the system.",
+  parameters: z.object({
+    explanation: z
+      .string()
+      .describe("The explanation of what you're about to do or why you're using a specific tool"),
+  }),
+  execute: async ({ explanation }) => {
+    log(`💡 ${explanation}`, "info");
+    return "Explanation provided to user.";
+  },
+});
+
+// Tool for editing files
 const editFileTool: Tool = tool({
   description:
     "Makes precise edits to files by replacing specific text with new content. Requires explicit user approval before changes are applied. Works only on files in the current working directory or Clara's memory system. When replacing text, include sufficient context (3-5 lines before/after) to ensure uniqueness. If a change is rejected, revise based on user feedback rather than resubmitting the same edit.",
@@ -301,17 +319,7 @@ export function getTools(): ToolSet {
     mkdirTool,
     editFileTool,
     replaceFileTool,
-    memeAgent: memeTool,
-    punAgent: punTool,
-  };
-}
-
-export function getPlannerTools(): ToolSet {
-  return {
-    fileAndContentSearchAgent: searchAgent,
-    webSearchAgent: webSearchTool,
-    readFileTool,
-    readMemoryTool,
+    explainTool,
   };
 }
 

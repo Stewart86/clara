@@ -87,12 +87,12 @@ export async function searchAgent(prompt: string): Promise<string> {
   try {
     const search: Tool = aiTool({
       description:
-        "Search for files in the project using a specialized search agent that can use advanced rg and fd commands. Always use this tool for any file searches.",
+        "Search for files in the project using a specialized search agent that uses advanced rg and fd commands. Always use this tool for any file or content searches.",
       parameters: z.object({
         pattern: z
           .string()
           .describe(
-            'the pattern to search for, excluding the command. For example: "src/**/*.ts"',
+            'the regex pattern to search for, excluding the command. For example: "src/**/*.ts"',
           ),
         tool: z.enum(["rg", "fd"]).describe("the search tool to use"),
       }),
@@ -113,9 +113,9 @@ export async function searchAgent(prompt: string): Promise<string> {
       },
     });
 
-    const model: OpenAIChatModelId = "gpt-4o-mini";
+    const model: OpenAIChatModelId = "gpt-4o";
     log(`[SearchAgent] Generating response with ${model}`, "system");
-    log(`[SearchAgent] Clara's Prompt: ${prompt}`, "system");
+    log(`[SearchAgent] Clara's asked: ${prompt}`, "system");
     const response = await generateText({
       model: openai(model),
       tools: {
