@@ -240,12 +240,14 @@ async function askUserFileEditApproval(
  * @param filePath Path to the file to edit
  * @param oldString The string to replace
  * @param newString The new string to insert
+ * @param reason The reason for the change
  * @returns Result message
  */
 export async function editFile(
   filePath: string,
   oldString: string,
   newString: string,
+  reason?: string,
 ): Promise<string> {
   try {
     // Check if path is allowed for editing
@@ -314,6 +316,11 @@ export async function editFile(
         diff = generateDiff(currentContent, newContent, absolutePath);
       }
 
+      // Show reason if provided
+      if (reason) {
+        log(`${reason}`, "info");
+      }
+
       // Display the file path and diff for pre-approved edit
       log(`[Edit] File: ${absolutePath}`, "system");
       console.log(`\n\x1b[1;36mPre-approved Changes:\x1b[0m`);
@@ -354,6 +361,11 @@ export async function editFile(
       diff = generateDiff(currentContent, newContent, absolutePath);
     }
 
+    // Show reason if provided
+    if (reason) {
+      log(`${reason}`, "info");
+    }
+    
     // Ask user for approval
     const { approved, rememberChoice, feedback } =
       await askUserFileEditApproval(absolutePath, diff);

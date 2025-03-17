@@ -62,13 +62,14 @@ Guidelines:
       tokenTracker.recordTokenUsage(
         "parser",
         response.usage.promptTokens || 0,
-        response.usage.completionTokens || 0
+        response.usage.completionTokens || 0,
+        model
       );
     } else {
       // Fallback if usage stats aren't available
       const promptTokenEstimate = Math.ceil((systemPrompt.length + code.length) / 4);
       const completionTokenEstimate = Math.ceil(text.length / 4);
-      tokenTracker.recordTokenUsage("parser", promptTokenEstimate, completionTokenEstimate);
+      tokenTracker.recordTokenUsage("parser", promptTokenEstimate, completionTokenEstimate, model);
     }
 
     log(

@@ -44,13 +44,14 @@ Caption: [text that would go on the meme]"`;
       tokenTracker.recordTokenUsage(
         "meme",
         response.usage.promptTokens || 0,
-        response.usage.completionTokens || 0
+        response.usage.completionTokens || 0,
+        "gpt-4o-mini"
       );
     } else {
       // Fallback if usage stats aren't available
       const promptTokenEstimate = Math.ceil((systemPrompt.length + topic.length + 40) / 4); // +40 for the "Create a programming meme about: " text
       const completionTokenEstimate = Math.ceil(text.length / 4);
-      tokenTracker.recordTokenUsage("meme", promptTokenEstimate, completionTokenEstimate);
+      tokenTracker.recordTokenUsage("meme", promptTokenEstimate, completionTokenEstimate, "gpt-4o-mini");
     }
 
     log(`[Meme] Generated successfully (${text.length} chars)`, "system");

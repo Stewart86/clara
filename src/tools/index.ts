@@ -6,7 +6,7 @@ import {
   parserAgent,
   memeAgent,
   punAgent,
-  assistantAgent,
+  assistantAgent as assistant,
   searchAgent as searchAssistant,
   webSearchAgent,
 } from "../agents/index.js";
@@ -22,13 +22,12 @@ import {
 } from "./memoryUtils.js";
 import { log } from "../utils/index.js";
 import { commandPrompt } from "../prompts/command-prompt.js";
-import { plannerAgent } from "../agents/planner.js";
 import { listDirectory } from "./listDirectory.js";
 
-// Tool for writing files (restricted to ~/.config/clara/ directory)
+// Tool for writing to Clara's memory system (restricted to ~/.config/clara/ directory)
 const writeMemoryTool: Tool = tool({
   description:
-    "Write content to a memory file. Creates or updates knowledge in Clara's memory system.",
+    "Creates or updates a memory file in Clara's knowledge system. Use this to store important information about the codebase that might be needed again later.",
   parameters: z.object({
     filePath: z
       .string()
@@ -45,9 +44,10 @@ const writeMemoryTool: Tool = tool({
   },
 });
 
-// Tool for creating directories (restricted to ~/.config/clara/ directory)
+// Tool for creating directories in Clara's memory system
 const mkdirTool: Tool = tool({
-  description: "Create a directory in Clara's memory system.",
+  description:
+    "Creates a new directory in Clara's memory system. Use this to organize memory files into logical categories.",
   parameters: z.object({
     dirPath: z
       .string()
@@ -63,10 +63,10 @@ const mkdirTool: Tool = tool({
   },
 });
 
-// Tool for reading from Clara's memory system
-const memoryTool: Tool = tool({
+// Tool for retrieving available memory files from Clara's memory system
+const readMemoryTool: Tool = tool({
   description:
-    "List memory files available in Clara's memory system. This tool will return a list of file paths that can then be read using the readFileTool.",
+    "Lists all memory files available in a specified directory of Clara's memory system. Returns paths that can be read with readFileTool. ALWAYS check memory first before performing codebase searches to see if relevant information is already stored.",
   parameters: z.object({
     memoryPath: z
       .string()
@@ -82,15 +82,15 @@ const memoryTool: Tool = tool({
   },
 });
 
-// Tool for specialized search using the search agent
+// Tool for advanced file and content search within the codebase
 const searchAgent: Tool = tool({
   description:
-    "Search for files in the project using a specialized search agent that can use advanced rg and fd commands. Always use this tool for any keyword searches.",
+    "Performs powerful searches across the codebase using a specialized agent with access to advanced search commands (rg, fd). ALWAYS use this tool when searching for files, code patterns, or specific content within the project.",
   parameters: z.object({
     prompt: z
       .string()
       .describe(
-        'Detailed description of what you are searching for. Be specific about file types, patterns, or content you need. For example: "Find all React components that use authentication", "Search for files handling cart promotions", etc.',
+        'Detailed description of what you need to find. Be specific about file types, patterns, or content. Examples: "Find all React components that use authentication", "Locate files handling cart promotions", "Search for functions that process payment data".',
       ),
   }),
   execute: async ({ prompt }) => {
@@ -98,24 +98,26 @@ const searchAgent: Tool = tool({
   },
 });
 
-// Tool for reading files
+// Tool for reading file contents
 const readFileTool: Tool = tool({
   description:
-    "Read the contents of a file. To reduce token usage, avoid reading entire files or a large line range unless necessary. Read in chunk of 20 - 40 lines when possible. Use the search tool to find relevant files first.",
+    "Reads the contents of a specified file. For efficiency, read focused sections (20-40 lines) when possible rather than entire files. Always use searchAgent first to locate relevant files.",
   parameters: z.object({
     filePath: z
       .string()
-      .describe("Name or path of the file to read (can be partial)"),
+      .describe(
+        "Name or path of the file to read (can be partial or full path)",
+      ),
     directory: z
       .string()
       .describe("Directory to search in, defaults to current directory"),
     lineRange: z
       .object({
-        start: z.number().describe("Start line number"),
-        end: z.number().describe("End line number"),
+        start: z.number().describe("Start line number (1-based indexing)"),
+        end: z.number().describe("End line number (inclusive)"),
       })
       .describe(
-        'Optional range of lines to read, e.g. { "start": 10, "end": 20 }',
+        'Optional range of lines to read for large files, e.g. { "start": 10, "end": 30 }',
       ),
   }),
   execute: async ({ filePath, directory, lineRange }) => {
@@ -123,51 +125,37 @@ const readFileTool: Tool = tool({
   },
 });
 
-// Tool for running shell commands
+// Tool for safely executing shell commands
 const commandTool: Tool = tool({
   description: commandPrompt,
   parameters: z.object({
     command: z
       .string()
-      .describe('Command to run, such as "ls", "cat", "find", etc.'),
+      .describe(
+        'Shell command to execute. Common examples: "ls", "grep", "find". All commands are validated for security before execution.',
+      ),
   }),
   execute: async ({ command }) => {
     return await secureCommand(command);
   },
 });
 
-// Tool for analyzing code structure
-const planner: Tool = tool({
-  description: `An AI agent that provides planning before starting on a coding task. It can analyze code, identify potential issues, and suggest improvements. Use this tool for deep reasoning and complex problem solving.`,
-  parameters: z.object({
-    description: z
-      .string()
-      .describe("The task or problem to analyze, be as detailed as possible"),
-    additionalContext: z
-      .string()
-      .describe(
-        "Additional context to consider during analysis. Provide any relevant information that may help the agent understand the problem better.",
-      ),
-  }),
-  execute: async ({ description, additionalContext }) => {
-    return await plannerAgent(description, additionalContext);
-  },
-});
-
-// Tool for deep thinking and complex problem solving
+// Tool for deep thinking and complex problem solving - no file changes or information retrieval
 const thinkTool: Tool = tool({
-  description: `Use the tool to think about something. It will not obtain new information or make any changes to the repository, but just log the thought. Use it when complex reasoning or brainstorming is needed. 
+  description: `Provides a space for structured reasoning about complex problems without making any changes to files or retrieving new information. Use when you need to brainstorm or work through a problem methodically.
 
 Common use cases:
-1. When exploring a repository and discovering the source of a bug, call this tool to brainstorm several unique ways of fixing the bug, and assess which change(s) are likely to be simplest and most effective
-2. After receiving test results, use this tool to brainstorm ways to fix failing tests
-3. When planning a complex refactoring, use this tool to outline different approaches and their tradeoffs
-4. When designing a new feature, use this tool to think through architecture decisions and implementation details
-5. When debugging a complex issue, use this tool to organize your thoughts and hypotheses
+1. Brainstorming multiple approaches to fix a bug and evaluating which would be most effective
+2. Analyzing failing tests to determine potential solutions
+3. Planning a complex refactoring by outlining different approaches and their tradeoffs
+4. Designing a new feature's architecture and implementation strategy
+5. Organizing thoughts and hypotheses when debugging complex issues
 
-The tool simply logs your thought process for better transparency and does not execute any code or make changes.`,
+This tool simply logs your thought process for transparency and does not execute code or make changes.`,
   parameters: z.object({
-    thought: z.string().describe("Your thoughts."),
+    thought: z
+      .string()
+      .describe("Your structured thoughts and reasoning process"),
   }),
   execute: async ({ thought }) => {
     log(`Thinking...\n${thought}`, "system");
@@ -175,69 +163,73 @@ The tool simply logs your thought process for better transparency and does not e
   },
 });
 
-// Tool for code parsing and understanding
+// Tool for code analysis and understanding
 const parserTool: Tool = tool({
   description:
-    "Analyze a code snippet to understand its structure, purpose, and functionality. Use for quick insights into unfamiliar code.",
+    "Analyzes code snippets to explain their structure, purpose, and functionality in clear terms. Ideal for quickly understanding unfamiliar code or complex implementations.",
   parameters: z.object({
-    code: z.string().describe("The code snippet to analyze"),
+    code: z.string().describe("The code snippet to analyze and explain"),
   }),
   execute: async ({ code }) => {
     return await parserAgent(code);
   },
 });
 
-// Tool for generating programming memes
+// Tool for generating programming-related meme descriptions
 const memeTool: Tool = tool({
   description:
-    "Use the Meme Agent to generate a programming-related meme description about a given topic. Use for light humor.",
+    "Generates creative programming-related meme descriptions about a given technical topic. Use to add light humor to technical discussions or explanations.",
   parameters: z.object({
-    topic: z.string().describe("The programming topic or concept for the meme"),
+    topic: z
+      .string()
+      .describe("The programming topic, concept, or technology for the meme"),
   }),
   execute: async ({ topic }) => {
     return await memeAgent(topic);
   },
 });
 
-// Tool for generating programming puns
+// Tool for generating programming-related puns from keywords
 const punTool: Tool = tool({
   description:
-    "Use the Pun Agent to generate programming-related puns using the provided keywords. Great for adding humor.",
+    "Creates clever programming-related puns using the provided keywords. Perfect for lightening technical discussions or adding a touch of humor to explanations.",
   parameters: z.object({
     keywords: z
       .array(z.string())
-      .describe("Keywords to use in the puns (provide 1-3 keywords)"),
+      .describe(
+        "Keywords to incorporate into the puns (provide 1-3 technical or programming terms)",
+      ),
   }),
   execute: async ({ keywords }) => {
     return await punAgent(keywords);
   },
 });
 
-// Tool for using the Assistant agent
-const assistantTool: Tool = tool({
+// Tool for delegating complex tasks to a specialized assistant agent
+const assistantAgent: Tool = tool({
   description:
-    "Use the Assistant Agent powered by OpenAI o1-mini to help with complex tasks. This agent has access to all Clara tools and can perform comprehensive searches and analyses.",
+    "Delegates complex tasks to a powerful assistant agent (powered by OpenAI o1-mini) that has access to all Clara tools. Use for comprehensive searches, in-depth analyses, or multi-step tasks that require sophisticated reasoning.",
   parameters: z.object({
     prompt: z
       .string()
       .describe(
-        "Detailed prompt describing the task for the assistant agent to perform",
+        "Detailed description of the task for the assistant agent to perform. Be specific about what you need analyzed or accomplished.",
       ),
   }),
   execute: async ({ prompt }) => {
-    return await assistantAgent(prompt);
+    return await assistant(prompt);
   },
 });
 
-// Tool for web search using OpenAI Responses API
+// Tool for retrieving up-to-date information from the web
 const webSearchTool: Tool = tool({
   description:
-    "Search the web for up-to-date information on any topic. Returns current, accurate information from the internet with source citations.",
+    "Performs web searches to retrieve current information on any topic using the OpenAI Responses API. Returns accurate, up-to-date information with source citations, ideal for answering questions about recent developments or documentation.",
   parameters: z.object({
     query: z
       .string()
       .describe(
-        "The search query to find information about on the web. Be specific and clear with your query for best results.",
+        "The specific search query to look up on the web. Be clear and precise for best results (e.g., 'Current React 18 lifecycle methods' rather than 'React methods').",
       ),
   }),
   execute: async ({ query }) => {
@@ -245,10 +237,10 @@ const webSearchTool: Tool = tool({
   },
 });
 
-// Tool for editing files
+// Tool for making targeted edits to files with user approval
 const editFileTool: Tool = tool({
   description:
-    "Edit a file by replacing a specific string with a new one. Requires user approval before making changes. Only works on files in the current working directory or Clara's memory directory. IMPORTANT: If the user rejects the edit, do not immediately retry with the same change. Instead, ask for more specific guidance or alternatives. Users can provide feedback with their rejection to guide you.",
+    "Makes precise edits to files by replacing specific text with new content. Requires explicit user approval before changes are applied. Works only on files in the current working directory or Clara's memory system. When replacing text, include sufficient context (3-5 lines before/after) to ensure uniqueness. If a change is rejected, revise based on user feedback rather than resubmitting the same edit.",
   parameters: z.object({
     filePath: z
       .string()
@@ -265,24 +257,29 @@ const editFileTool: Tool = tool({
       .describe(
         "The new string to insert in place of the old string (or entire file content for new files)",
       ),
+    reason: z
+      .string()
+      .describe("A clear explanation of why this change is needed"),
   }),
-  execute: async ({ filePath, oldString, newString }) => {
-    return await editFile(filePath, oldString, newString);
+  execute: async ({ filePath, oldString, newString, reason }) => {
+    return await editFile(filePath, oldString, newString, reason);
   },
 });
 
-// Tool for completely replacing/creating files
+// Tool for creating new files or completely replacing existing files with user approval
 const replaceFileTool: Tool = tool({
   description:
-    "Completely replace or create a file with new content. Requires user approval before making changes. Only works on files in the current working directory or Clara's memory directory. IMPORTANT: If the user rejects the changes, do not immediately retry with the same content. Instead, ask for more specific guidance or alternatives. Users can provide feedback with their rejection to guide you.",
+    "Creates new files or completely replaces existing files with new content. Requires explicit user approval before changes are applied. Works only on files in the current working directory or Clara's memory system. Useful for major refactoring or creating new files from scratch. If changes are rejected, adjust based on user feedback rather than resubmitting identical content.",
   parameters: z.object({
     filePath: z
       .string()
       .describe(
         "The path to the file to create or replace (can be relative to current directory)",
       ),
-    content: z.string().describe("The new content for the file"),
-    reason: z.string().describe("The reason for the change"),
+    content: z.string().describe("The complete new content for the file"),
+    reason: z
+      .string()
+      .describe("A clear explanation of why this change is needed"),
   }),
   execute: async ({ filePath, content, reason }) => {
     return await replaceFile(filePath, content, reason);
@@ -292,21 +289,29 @@ const replaceFileTool: Tool = tool({
 // Get all available tools
 export function getTools(): ToolSet {
   return {
-    searchAgent,
-    readFileTool,
-    commandTool,
     thinkTool,
-    parserTool,
-    memeTool,
-    punTool,
+    fileAndContentSearchAgent: searchAgent,
+    webSearchAgent: webSearchTool,
+    assistantAgent,
+    commandTool,
+    readFileTool,
+    parserAgent: parserTool,
     writeMemoryTool,
-    planner,
+    readMemoryTool,
     mkdirTool,
-    memoryTool,
-    assistantTool,
-    webSearchTool,
     editFileTool,
     replaceFileTool,
+    memeAgent: memeTool,
+    punAgent: punTool,
+  };
+}
+
+export function getPlannerTools(): ToolSet {
+  return {
+    fileAndContentSearchAgent: searchAgent,
+    webSearchAgent: webSearchTool,
+    readFileTool,
+    readMemoryTool,
   };
 }
 

@@ -23,6 +23,9 @@ export class SessionState {
   public commandApprovals: CommandApprovalState;
   public fileEditApprovals?: FileEditApprovalState;
   
+  // General purpose state storage for the session
+  private stateMap: Map<string, any> = new Map();
+  
   // Shared readline interface for user input
   private _sharedReadline: ReadlineInterface | null = null;
 
@@ -67,6 +70,34 @@ export class SessionState {
         return false;
       }
     };
+  }
+  
+  /**
+   * Set a value in the state map
+   */
+  public set(key: string, value: any): void {
+    this.stateMap.set(key, value);
+  }
+  
+  /**
+   * Get a value from the state map
+   */
+  public get(key: string): any {
+    return this.stateMap.get(key);
+  }
+  
+  /**
+   * Check if a key exists in the state map
+   */
+  public has(key: string): boolean {
+    return this.stateMap.has(key);
+  }
+  
+  /**
+   * Delete a key from the state map
+   */
+  public delete(key: string): boolean {
+    return this.stateMap.delete(key);
   }
 
   /**

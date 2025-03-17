@@ -42,14 +42,15 @@ Example output format:
       tokenTracker.recordTokenUsage(
         "pun",
         response.usage.promptTokens || 0,
-        response.usage.completionTokens || 0
+        response.usage.completionTokens || 0,
+        "gpt-4o-mini"
       );
     } else {
       // Fallback if usage stats aren't available
       const userPrompt = `Create programming puns using these keywords: ${keywords.join(', ')}`;
       const promptTokenEstimate = Math.ceil((systemPrompt.length + userPrompt.length) / 4);
       const completionTokenEstimate = Math.ceil(text.length / 4);
-      tokenTracker.recordTokenUsage("pun", promptTokenEstimate, completionTokenEstimate);
+      tokenTracker.recordTokenUsage("pun", promptTokenEstimate, completionTokenEstimate, "gpt-4o-mini");
     }
 
     log(`[Pun] Generated successfully (${text.length} chars)`, "system");

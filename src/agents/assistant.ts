@@ -42,14 +42,15 @@ Your primary goal is to assist with complex code analysis and explanation tasks.
       tokenTracker.recordTokenUsage(
         "assistant",
         response.usage.promptTokens || 0,
-        response.usage.completionTokens || 0
+        response.usage.completionTokens || 0,
+        model
       );
     } else {
       // Fallback if usage stats aren't available
       // Estimate based on typical token counts (rough estimate)
       const promptTokenEstimate = Math.ceil((systemPrompt.length + prompt.length) / 4);
       const completionTokenEstimate = Math.ceil(response.text.length / 4);
-      tokenTracker.recordTokenUsage("assistant", promptTokenEstimate, completionTokenEstimate);
+      tokenTracker.recordTokenUsage("assistant", promptTokenEstimate, completionTokenEstimate, model);
     }
 
     return response.text;

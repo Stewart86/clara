@@ -44,13 +44,14 @@ export async function webSearchAgent(query: string): Promise<string> {
       tokenTracker.recordTokenUsage(
         "websearch",
         response.usage.promptTokens || 0,
-        response.usage.completionTokens || 0
+        response.usage.completionTokens || 0,
+        "gpt-4o" // Using response API with gpt-4o
       );
     } else {
       // Fallback if usage stats aren't available
       const promptTokenEstimate = Math.ceil((systemPrompt.length + query.length) / 4);
       const completionTokenEstimate = Math.ceil(response.text.length / 4);
-      tokenTracker.recordTokenUsage("websearch", promptTokenEstimate, completionTokenEstimate);
+      tokenTracker.recordTokenUsage("websearch", promptTokenEstimate, completionTokenEstimate, "gpt-4o");
     }
 
     // Include sources in the response if available

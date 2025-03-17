@@ -29,18 +29,27 @@ Clara is an agentic AI assistant designed to simplify complex codebases for both
 - **Types**: TypeScript with strict typing, explicit function parameter and return types
 - **Naming**: camelCase for variables/functions, PascalCase for classes/types
 - **Error Handling**: Use try/catch blocks for async operations with proper error logging
+- **Function Design**: Break down complex functions into smaller, focused helper functions
 
 ## Project Structure
-- `src/agents/` - AI agent implementations (meme, parser, pun, thinker)
+- `src/agents/` - AI agent implementations (meme, parser, pun, planner)
 - `src/cli/` - Command-line interface components
 - `src/tools/` - Tool implementations (search, file reading, memory management)
 - `src/tests/` - Test files using Bun's test runner
+- `poc/` - Proof of concept explorations
 
 ## Agent Types
-- **Thinker Agent**: Super powerful agent for deep insights (DeepSeek or OpenAI o1)
+- **Planner Agent**: Analyzes user requests and generates structured action plans with search strategies (OpenAI o3-mini)
 - **Parser Agent**: Specialized for reading code (OpenAI 4o-mini)
 - **Meme Agent**: Natural meme generator for given topics
 - **Pun Agent**: Provides puns based on keywords
+- **Search Agent**: Specialized for web search
+
+## Processing Pipeline
+1. User input is captured through CLI interface
+2. Planner agent analyzes request and creates structured action plan
+3. Main Clara agent follows plan using appropriate tools
+4. Response is formatted and displayed to user
 
 ## Memory System
 - Base location: `~/.config/clara/`

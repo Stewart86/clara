@@ -61,18 +61,111 @@ export async function getMemoryFilesContext(): Promise<CoreMessage> {
     if (memoryFiles.length === 0) {
       context +=
         "No memory files found yet. I'll create memory files as we discuss the project.\n";
+      
+      // Create project overview file
+      try {
+        const overviewDir = path.join(projectMemoryDir, "codebase");
+        await ensureMemoryDirectoryExists(overviewDir);
+        
+        const overviewPath = path.join(overviewDir, "overview.md");
+        const initialOverview = `# Project Overview
+        
+Created: ${new Date().toISOString()}
+
+This file contains a high-level overview of the project structure and architecture.
+
+## Project Structure
+- [Fill in key directories and their purposes]
+
+## Core Components
+- [List main components and their responsibilities]
+
+## Architecture
+- [Describe the overall architecture]
+
+## Key Files
+- [List important files and what they do]
+
+## Dependencies
+- [Note major dependencies and their versions]
+
+## Development Workflow
+- [Describe common development tasks]
+
+*This overview is a living document that will be updated as we learn more about the project.*
+`;
+        
+        const writeFile = await import("fs/promises").then(m => m.writeFile);
+        await writeFile(overviewPath, initialOverview);
+        context += `\nI've created an initial project overview file at codebase/overview.md that I'll update as we work together.\n`;
+      } catch (error) {
+        // Continue if creating the overview file fails
+      }
     } else {
       context += `Found ${memoryFiles.length} memory files for this project:\n\n`;
+      
+      // Check if overview file exists
+      const hasOverview = memoryFiles.some(file => 
+        file.toLowerCase() === 'codebase/overview.md' || 
+        file.toLowerCase() === 'overview.md');
+      
+      // Highlight the overview file if it exists
       memoryFiles.forEach((file) => {
-        context += `- ${file}\n`;
+        if (file.toLowerCase() === 'codebase/overview.md' || file.toLowerCase() === 'overview.md') {
+          context += `- ${file} (Project Overview) 📋\n`;
+        } else {
+          context += `- ${file}\n`;
+        }
       });
+
+      // If no overview exists, suggest creating one
+      if (!hasOverview) {
+        try {
+          const overviewDir = path.join(projectMemoryDir, "codebase");
+          await ensureMemoryDirectoryExists(overviewDir);
+          
+          const overviewPath = path.join(overviewDir, "overview.md");
+          const initialOverview = `# Project Overview
+          
+Created: ${new Date().toISOString()}
+
+This file contains a high-level overview of the project structure and architecture.
+
+## Project Structure
+- [Fill in key directories and their purposes]
+
+## Core Components
+- [List main components and their responsibilities]
+
+## Architecture
+- [Describe the overall architecture]
+
+## Key Files
+- [List important files and what they do]
+
+## Dependencies
+- [Note major dependencies and their versions]
+
+## Development Workflow
+- [Describe common development tasks]
+
+*This overview is a living document that will be updated as we learn more about the project.*
+`;
+          
+          const writeFile = await import("fs/promises").then(m => m.writeFile);
+          await writeFile(overviewPath, initialOverview);
+          context += `\nI've created a project overview file at codebase/overview.md that I'll update as we work together.\n`;
+        } catch (error) {
+          // Continue if creating the overview file fails
+        }
+      }
 
       context += `Today's local datetime is ${new Date().toLocaleString()}\n`;
 
       context +=
         "\nI'll start my investigation using these memory files to understand the project better.\n" +
         "You can ask me to read any of these files to explore information stored in my memory.\n" +
-        "I'll make sure to keep my memory up-to-date whenever I've discover any new insight that is not in my memory.\n";
+        "I'll regularly update the project overview file as I discover new insights about the project structure and architecture.\n";
     }
 
     context += "</env>";

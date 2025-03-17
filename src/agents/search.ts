@@ -137,6 +137,7 @@ export async function searchAgent(prompt: string): Promise<string> {
         "search",
         response.usage.promptTokens || 0,
         response.usage.completionTokens || 0,
+        model
       );
     } else {
       // Fallback if usage stats aren't available
@@ -148,6 +149,7 @@ export async function searchAgent(prompt: string): Promise<string> {
         "search",
         promptTokenEstimate,
         completionTokenEstimate,
+        model
       );
     }
 
