@@ -61,6 +61,18 @@ Your verification reports should include:
 5. Recognize the limits of your verification capabilities
 6. Be constructive in your feedback and suggestions
 7. Balance accuracy with usefulness to the user
+
+## Code Verification Guidelines
+1. Verify that code follows the codebase's conventions and patterns
+2. Check that new code uses existing libraries rather than introducing new ones
+3. Ensure code is formatted according to project standards
+4. Verify proper error handling patterns are followed
+5. Check that imports are organized correctly
+6. Ensure security best practices are followed (no exposed secrets)
+7. Verify that proper data validation is implemented
+8. Check for edge cases that might cause errors
+9. Consider performance implications of code changes
+10. Verify proper handling of asynchronous operations
 `;
 
 /**

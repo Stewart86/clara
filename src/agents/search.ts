@@ -61,11 +61,25 @@ Follow these best practices for file searching:
    - files / folders like CLAUDE.md, .cursorrules, or .github/copilot-instructions.md
    - folders like docs/ might contain useful information
 
-9. Response considerations:
+9. End-to-End Code Understanding:
+   - IMPORTANT: Always search for both implementations AND references when analyzing code features
+   - Trace the full lifecycle of functions, classes, and methods from definition to usage
+   - When finding class/function definitions, also search for where they're imported and used
+   - When finding usages/references, also search for their implementations
+   - Provide a complete picture by finding both where code is defined and where it's used
+   - For methods, track both class implementation and external calls to those methods
+   - For libraries/modules, find both the import statements and the actual usage in code
+   - Look for test files that demonstrate how components are used in practice
+   - Search for related configuration files that might affect how components operate
+   - Connect database schema definitions with their query implementations
+   - Link UI components with their state management and business logic
+
+10. Response considerations:
    - Always include the full path of the file
    - Ensure the response is comprehensive and accurate
+   - Organize results to show both implementations and references when relevant
 
-10. Tool use guidelines:
+11. Tool use guidelines:
    - IMPORTANT: Always use the search tool when performing file or content searches
    - When using the search tool, provide the pattern parameter as a string without quotes
    - Specify the tool parameter as either "rg" for content searches or "fd" for filename searches
@@ -74,11 +88,19 @@ Follow these best practices for file searching:
    - When search returns no results, try alternative patterns with the tool
    - Use tools iteratively to explore the codebase structure
    
-11. Context awareness:
+12. Context awareness:
    - Review the history of previously searched patterns from the context
    - Avoid repeating searches that have already been performed
    - Build upon previous search results to refine your approach
    - When searching iteratively, use information from previous searches to guide your strategy
+   
+13. File Context Management:
+   - Keep track of files you've already read in the current conversation
+   - Do not re-read files that haven't changed since last accessed
+   - When you need to reference multiple files, use a single batch of concurrent tool calls
+   - Only re-read a file if the user explicitly asks for it, if it's been modified, or if you need to verify changes
+   - If using previously cached file content, mention this to maintain transparency
+   - Focus on understanding code's usage patterns, not just its definition
 `;
 
 /**

@@ -26,7 +26,7 @@ Clara runs entirely via a command line interface. It can be used interactively o
 
 Clara is built using an adaptive orchestration architecture with specialized agents that work together to analyze and explain code:
 
-1. **Orchestrator Agent**: Coordinates the entire workflow, creating detailed execution plans with dependencies between steps. Uses OpenAI's o3-mini model for efficient planning.
+1. **Orchestrator Agent**: Coordinates the entire workflow, creating dynamic execution plans with step dependencies and real-time plan adaptation capabilities. Uses OpenAI's o3-mini model for efficient planning and continuous plan refinement based on new information discovered during execution.
 
 2. **Search Agent**: Efficiently locates code patterns and files with incremental search strategies and result caching. Optimized for finding precisely what you need in large codebases.
 
@@ -254,13 +254,23 @@ Clara is built with an adaptive orchestration architecture featuring context man
 ### Core Components
 
 - **Context Management System**: Maintains complete workflow state and history
-- **Orchestrator Agent**: Creates and executes plans with step dependencies
+- **Orchestrator Agent**: Creates and executes plans with step dependencies and real-time plan adaptation
 - **Specialized Worker Agents**: Task-specific agents optimized for particular functions
 - **CLI Layer**: Parses commands and options, manages user interactions
 
+#### Dynamic Plan Adaptation
+
+Clara's orchestrator implements a sophisticated plan adaptation mechanism that:
+
+- Evaluates plan effectiveness after each completed step
+- Identifies new search paths and investigative opportunities based on discovery
+- Dynamically modifies the execution plan by adding, removing, or reordering steps
+- Adapts to unexpected information and errors encountered during execution
+- Uses the verification agent to make informed decisions about plan modifications
+
 ### Agents
 
-- **Orchestrator Agent**: Coordinates workflow, creates execution plans with dependency management (using OpenAI o3-mini)
+- **Orchestrator Agent**: Coordinates workflow, creates adaptive execution plans with dependency management and real-time plan adaptation based on new discoveries (using OpenAI o3-mini)
 - **Search Agent**: Finds files and code with incremental search strategies (using OpenAI gpt-4o-mini)
 - **Memory Agent**: Manages knowledge with metadata tagging and relationship tracking (using OpenAI o3-mini)
 - **Command Agent**: Executes shell commands with security validation and result parsing (using OpenAI o3-mini)
@@ -364,6 +374,7 @@ Available experimental features:
 - **memory-indexing**: Enables advanced memory indexing and relationship tracking
 - **agent-activity**: Shows real-time agent activity in the terminal (default: enabled)
 - **context-sharing**: Enables context sharing between different agents (default: enabled)
+- **plan-adaptation**: Enables dynamic plan adaptation after each execution step (default: enabled)
 
 ## Troubleshooting
 

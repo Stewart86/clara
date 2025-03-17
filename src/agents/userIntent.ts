@@ -2,7 +2,8 @@ import { z } from "zod";
 import { log } from "../utils/logger.js";
 import { BaseAgent, type AgentConfig } from "./base.js";
 
-const getUserIntentAgentSystemPrompt = (): string => `You are a specialized User Intent Agent for Clara, responsible for deeply understanding user requests, extracting their underlying needs, and identifying the true objectives behind their questions. Your goal is to help Clara respond more accurately to what users are really trying to accomplish.
+const getUserIntentAgentSystemPrompt =
+  (): string => `You are a specialized User Intent Agent for Clara, responsible for deeply understanding user requests, extracting their underlying needs, and identifying the true objectives behind their questions. Your goal is to help Clara respond more accurately to what users are really trying to accomplish.
 
 ## Core Responsibilities
 1. Analyzing user queries to identify explicit and implicit needs
@@ -11,6 +12,8 @@ const getUserIntentAgentSystemPrompt = (): string => `You are a specialized User
 4. Identifying priority information the user needs
 5. Recognizing when users might be asking the wrong question
 6. Suggesting better approaches when appropriate
+7. Understanding code style and editing preferences
+8. Identifying file manipulation needs
 
 ## Intent Analysis Process
 When analyzing user requests, you should:
@@ -54,6 +57,25 @@ Your analysis should include:
 5. Suggestions for clarification if the request is ambiguous
 6. Recommended approach for answering the query
 
+## File Editing Analysis
+When users request code or file changes:
+1. Identify which files need examination or modification
+2. Determine if the user wants targeted changes or complete rewrites
+3. Recognize code style and formatting preferences
+4. Consider conventional patterns in the existing codebase
+5. Identify when the user needs to see a diff of proposed changes
+6. Recognize when to use editFileTool for targeted changes vs. replaceFileTool for complete rewrites
+7. Consider if the user is asking for file creation or modification
+
+## Code Style Understanding
+Pay attention to code style preferences:
+1. Identify the user's preferred libraries and frameworks
+2. Note naming conventions (camelCase, PascalCase, etc.)
+3. Recognize formatting preferences (indentation, line length, etc.)
+4. Understand error handling patterns
+5. Identify testing approaches
+6. Note comment style and documentation preferences
+
 Remember: Your goal is to help Clara provide the most helpful response possible, which sometimes means answering a better version of the question than what was literally asked.`;
 
 /**
@@ -61,24 +83,46 @@ Remember: Your goal is to help Clara provide the most helpful response possible,
  */
 const UserIntentSchema = z.object({
   explicitRequest: z.string().describe("What the user explicitly asked for"),
-  implicitNeeds: z.array(z.string()).describe("Underlying needs implied but not directly stated"),
+  implicitNeeds: z
+    .array(z.string())
+    .describe("Underlying needs implied but not directly stated"),
   queryClassification: z.object({
     primaryCategory: z.string().describe("Main category of the query"),
-    secondaryCategories: z.array(z.string()).describe("Additional relevant categories"),
-    confidence: z.number().min(0).max(100).describe("Confidence in the classification (0-100)")
+    secondaryCategories: z
+      .array(z.string())
+      .describe("Additional relevant categories"),
+    confidence: z
+      .number()
+      .min(0)
+      .max(100)
+      .describe("Confidence in the classification (0-100)"),
   }),
-  contextualFactors: z.array(z.string()).describe("Relevant contextual information that affects interpretation"),
-  keyParameters: z.array(z.object({
-    name: z.string().describe("Parameter name"),
-    value: z.string().describe("Parameter value or description"),
-    importance: z.enum(["critical", "high", "medium", "low"]).describe("How important this parameter is")
-  })).describe("Parameters extracted from the query"),
-  reformulatedQuery: z.string().describe("The query reformulated for clarity and precision"),
+  contextualFactors: z
+    .array(z.string())
+    .describe("Relevant contextual information that affects interpretation"),
+  keyParameters: z
+    .array(
+      z.object({
+        name: z.string().describe("Parameter name"),
+        value: z.string().describe("Parameter value or description"),
+        importance: z
+          .enum(["critical", "high", "medium", "low"])
+          .describe("How important this parameter is"),
+      }),
+    )
+    .describe("Parameters extracted from the query"),
+  reformulatedQuery: z
+    .string()
+    .describe("The query reformulated for clarity and precision"),
   suggestedApproach: z.object({
     strategy: z.string().describe("How to approach answering this query"),
-    recommendedAgents: z.array(z.string()).describe("Which specialized agents should handle this"),
-    informationNeeded: z.array(z.string()).describe("What information is needed to properly answer")
-  })
+    recommendedAgents: z
+      .array(z.string())
+      .describe("Which specialized agents should handle this"),
+    informationNeeded: z
+      .array(z.string())
+      .describe("What information is needed to properly answer"),
+  }),
 });
 
 /**
@@ -88,14 +132,14 @@ const UserIntentSchema = z.object({
 export class UserIntentAgent extends BaseAgent {
   constructor() {
     const config: AgentConfig = {
-      name: 'userIntent',
-      description: 'User Intent Analysis Agent',
-      provider: 'openai',
-      model: 'o3-mini',
+      name: "userIntent",
+      description: "User Intent Analysis Agent",
+      provider: "openai",
+      model: "gpt-4o-mini",
       systemPrompt: getUserIntentAgentSystemPrompt(),
-      tools: {},  // No special tools needed for intent analysis
+      tools: {}, // No special tools needed for intent analysis
       maxSteps: 1, // Usually a single inference step is sufficient
-      reasoningEffort: 'high',
+      reasoningEffort: "high",
     };
 
     super(config);
@@ -104,17 +148,21 @@ export class UserIntentAgent extends BaseAgent {
   /**
    * Analyze a user query to understand the true intent
    */
-  public async analyzeIntent(query: string, conversationHistory?: string): Promise<string | object> {
+  public async analyzeIntent(
+    query: string,
+    conversationHistory?: string,
+  ): Promise<string | object> {
     // Initialize operation in context
-    const context = this.contextManager.getContext() || this.contextManager.createContext();
-    
+    const context =
+      this.contextManager.getContext() || this.contextManager.createContext();
+
     log(`[UserIntentAgent] Analyzing query: ${query}`, "system");
-    
+
     let prompt = `Please analyze this user query to understand the true intent:
 
 USER QUERY: "${query}"
 
-${conversationHistory ? `CONVERSATION HISTORY:\n${conversationHistory}\n` : ''}
+${conversationHistory ? `CONVERSATION HISTORY:\n${conversationHistory}\n` : ""}
 
 I need a detailed analysis of:
 1. What the user is explicitly asking for
@@ -130,19 +178,19 @@ Please return your analysis in the specified JSON format.`;
       // Generate structured intent analysis
       const intentAnalysis = await this.executeWithSchema(
         prompt,
-        UserIntentSchema
+        UserIntentSchema,
       );
-      
+
       // Store the analysis in context
-      this.contextManager.storeResult('userIntent', intentAnalysis);
-      
+      this.contextManager.storeResult("userIntent", intentAnalysis);
+
       return intentAnalysis;
     } catch (error) {
       log(
         `[UserIntentAgent Error] ${error instanceof Error ? error.message : String(error)}`,
-        "error"
+        "error",
       );
-      
+
       // Fall back to unstructured analysis
       try {
         const fallbackAnalysis = await this.execute(prompt);
@@ -158,61 +206,66 @@ Please return your analysis in the specified JSON format.`;
    */
   public formatIntentAnalysis(analysis: any): string {
     let output = `# User Intent Analysis\n\n`;
-    
+
     // Explicit and implicit needs
     output += `## Request Understanding\n`;
     output += `**Explicit Request:** ${analysis.explicitRequest}\n\n`;
-    
+
     output += `**Implicit Needs:**\n`;
     analysis.implicitNeeds.forEach((need: string, i: number) => {
       output += `${i + 1}. ${need}\n`;
     });
-    output += '\n';
-    
+    output += "\n";
+
     // Query classification
     output += `## Query Classification\n`;
     output += `**Primary Category:** ${analysis.queryClassification.primaryCategory} (${analysis.queryClassification.confidence}% confidence)\n`;
-    
-    if (analysis.queryClassification.secondaryCategories && analysis.queryClassification.secondaryCategories.length > 0) {
-      output += `**Secondary Categories:** ${analysis.queryClassification.secondaryCategories.join(', ')}\n`;
+
+    if (
+      analysis.queryClassification.secondaryCategories &&
+      analysis.queryClassification.secondaryCategories.length > 0
+    ) {
+      output += `**Secondary Categories:** ${analysis.queryClassification.secondaryCategories.join(", ")}\n`;
     }
-    output += '\n';
-    
+    output += "\n";
+
     // Contextual factors if present
     if (analysis.contextualFactors && analysis.contextualFactors.length > 0) {
       output += `## Contextual Factors\n`;
       analysis.contextualFactors.forEach((factor: string, i: number) => {
         output += `- ${factor}\n`;
       });
-      output += '\n';
+      output += "\n";
     }
-    
+
     // Key parameters if present
     if (analysis.keyParameters && analysis.keyParameters.length > 0) {
       output += `## Key Parameters\n`;
       analysis.keyParameters.forEach((param: any) => {
         output += `**${param.name}** (${param.importance}): ${param.value}\n`;
       });
-      output += '\n';
+      output += "\n";
     }
-    
+
     // Reformulated query
     output += `## Reformulated Query\n`;
     output += `"${analysis.reformulatedQuery}"\n\n`;
-    
+
     // Suggested approach
     output += `## Suggested Approach\n`;
     output += `**Strategy:** ${analysis.suggestedApproach.strategy}\n`;
-    output += `**Recommended Agents:** ${analysis.suggestedApproach.recommendedAgents.join(', ')}\n`;
-    
+    output += `**Recommended Agents:** ${analysis.suggestedApproach.recommendedAgents.join(", ")}\n`;
+
     output += `**Information Needed:**\n`;
-    analysis.suggestedApproach.informationNeeded.forEach((info: string, i: number) => {
-      output += `${i + 1}. ${info}\n`;
-    });
-    
+    analysis.suggestedApproach.informationNeeded.forEach(
+      (info: string, i: number) => {
+        output += `${i + 1}. ${info}\n`;
+      },
+    );
+
     return output;
   }
-  
+
   /**
    * Factory function for creating user intent agent
    */

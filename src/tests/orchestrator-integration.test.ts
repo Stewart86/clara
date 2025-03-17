@@ -119,7 +119,7 @@ test("OrchestratorAgent executes plan by dispatching to worker agents", async ()
 
   // The actual plan execution may create a summary using the verification agent
   // which doesn't include "Step X:" prefixes in its output
-  expect(result).toContain("Mock search result") || expect(result).toContain("Mock verification result");
+  expect(result.includes("Mock search result") || result.includes("Mock verification result")).toBe(true);
   
   // Verify steps are completed in context
   const context = contextManager.getContext();

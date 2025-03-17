@@ -145,7 +145,14 @@ export class ContextManager {
     filePath: string,
     lineRange: [number, number] | null,
   ): void {
-    if (!this.currentContext) return;
+    if (!this.currentContext) {
+      this.currentContext = this.createContext();
+    }
+
+    // Initialize filesRead if it doesn't exist
+    if (!this.currentContext.filesRead) {
+      this.currentContext.filesRead = {};
+    }
 
     if (!this.currentContext.filesRead[filePath]) {
       this.currentContext.filesRead[filePath] = {
@@ -223,8 +230,19 @@ export class ContextManager {
    * Record error occurrence
    */
   public recordError(step: number, error: string, recovery?: string): void {
-    if (!this.currentContext) return;
+    if (!this.currentContext) {
+      this.currentContext = this.createContext();
+    }
+    
+    // Ensure the errors array exists
+    if (!this.currentContext.errors) {
+      this.currentContext.errors = [];
+    }
+    
     this.currentContext.errors.push({ step, error, recovery });
+    
+    // Log the error for debugging
+    console.error(`[Context] Recorded error in step ${step}: ${error}`);
   }
 
   /**

@@ -87,11 +87,93 @@ export class BaseAgent {
             // Track tool execution in context based on tool type
             this.trackToolExecution(toolName, params, result);
 
-            // Update context in messages
+            // Update context in messages with appropriate level of detail
             if (executionContext.messages) {
-              this.contextManager.embedContextInMessages(
-                executionContext.messages,
-              );
+              if (this.config.name === "orchestrator") {
+                // Orchestrator gets the full context
+                this.contextManager.embedContextInMessages(executionContext.messages);
+              } else {
+                // Worker agents get summarized context
+                const currentContext = this.contextManager.getContext();
+                if (currentContext) {
+                  // Create a summarized context with only essential information
+                  const summarizedContext = {
+                    requestId: currentContext.requestId,
+                    userId: currentContext.userId,
+                    timestamp: currentContext.timestamp,
+                    currentStep: currentContext.currentStep,
+                    totalSteps: currentContext.totalSteps,
+                    // Include only relevant plan information
+                    plan: currentContext.plan ? {
+                      taskCategory: currentContext.plan.taskCategory,
+                      steps: currentContext.plan.steps.filter(step => 
+                        step.id === currentContext.currentStep || 
+                        (currentContext.plan?.steps.find(s => s.id === currentContext.currentStep)?.dependencies || []).includes(step.id)
+                      )
+                    } : null,
+                    // Include essential results and latest action records
+                    intermediateResults: {},
+                    // Initialize all tracking fields to avoid undefined errors
+                    filesSearched: currentContext.filesSearched || [],
+                    filesRead: currentContext.filesRead ? 
+                      Object.keys(currentContext.filesRead)
+                        .slice(-3)
+                        .reduce((obj, key) => {
+                          obj[key] = currentContext.filesRead[key];
+                          return obj;
+                        }, {} as typeof currentContext.filesRead) : {},
+                    commandsExecuted: currentContext.commandsExecuted ? currentContext.commandsExecuted.slice(-3) : [],
+                    webSearches: currentContext.webSearches ? currentContext.webSearches.slice(-3) : [],
+                    memoryCreated: currentContext.memoryCreated || [],
+                    memoryRead: currentContext.memoryRead || [],
+                    errors: currentContext.errors || [],
+                    tokenUsage: currentContext.tokenUsage || {},
+                  };
+                  
+                  // Only include dependency results in the context
+                  if (currentContext.plan) {
+                    const currentStepObj = currentContext.plan.steps.find(s => s.id === currentContext.currentStep);
+                    if (currentStepObj && currentStepObj.dependencies) {
+                      for (const depId of currentStepObj.dependencies) {
+                        const depStep = currentContext.plan.steps.find(s => s.id === depId);
+                        if (depStep && depStep.result) {
+                          summarizedContext.intermediateResults[`step_${depId}`] = depStep.result;
+                        }
+                      }
+                    }
+                  }
+                  
+                  // Replace the full context with summarized version for worker agents
+                  const contextJson = JSON.stringify(summarizedContext);
+                  const contextMessage = `__CONTEXT_START__${contextJson}__CONTEXT_END__`;
+                  
+                  // Find and replace or add context message
+                  const contextIndex = executionContext.messages.findIndex(msg => {
+                    const content = msg.content;
+                    if (typeof content === "string") {
+                      return (
+                        content.includes("__CONTEXT_START__") &&
+                        content.includes("__CONTEXT_END__")
+                      );
+                    }
+                    return false;
+                  });
+                  
+                  if (contextIndex >= 0) {
+                    // Update existing context message
+                    executionContext.messages[contextIndex] = {
+                      ...executionContext.messages[contextIndex],
+                      content: contextMessage,
+                    };
+                  } else {
+                    // Add new context message
+                    executionContext.messages.push({
+                      role: "system",
+                      content: contextMessage,
+                    });
+                  }
+                }
+              }
             }
 
             return result;
@@ -176,8 +258,65 @@ export class BaseAgent {
       } as CoreUserMessage,
     ];
 
-    // Embed context in messages
-    this.contextManager.embedContextInMessages(messages);
+    // Embed context in messages - but only include a summarized version for non-orchestrator agents
+    if (this.config.name !== "orchestrator") {
+      // Create a summarized context with only essential information
+      const currentContext = this.contextManager.getContext();
+      if (currentContext) {
+        const summarizedContext = {
+          requestId: currentContext.requestId,
+          userId: currentContext.userId,
+          timestamp: currentContext.timestamp,
+          currentStep: currentContext.currentStep,
+          totalSteps: currentContext.totalSteps,
+          // Include only the current step's dependencies from the plan if applicable
+          plan: currentContext.plan ? {
+            taskCategory: currentContext.plan.taskCategory,
+            steps: currentContext.plan.steps.filter(step => 
+              step.id === currentContext.currentStep || 
+              (currentContext.plan?.steps.find(s => s.id === currentContext.currentStep)?.dependencies || []).includes(step.id)
+            )
+          } : null,
+          // Include only relevant results needed for this step
+          intermediateResults: {},
+          // Initialize all required fields to avoid undefined errors
+          filesSearched: currentContext.filesSearched || [],
+          filesRead: currentContext.filesRead || {},
+          commandsExecuted: currentContext.commandsExecuted || [],
+          webSearches: currentContext.webSearches || [],
+          memoryCreated: currentContext.memoryCreated || [],
+          memoryRead: currentContext.memoryRead || [],
+          errors: currentContext.errors || [],
+          tokenUsage: currentContext.tokenUsage || {},
+        };
+        
+        // Only include dependencies' results in the context
+        if (currentContext.plan) {
+          const currentStepObj = currentContext.plan.steps.find(s => s.id === currentContext.currentStep);
+          if (currentStepObj && currentStepObj.dependencies) {
+            for (const depId of currentStepObj.dependencies) {
+              const depStep = currentContext.plan.steps.find(s => s.id === depId);
+              if (depStep && depStep.result) {
+                summarizedContext.intermediateResults[`step_${depId}`] = depStep.result;
+              }
+            }
+          }
+        }
+        
+        // Replace the full context with summarized version for worker agents
+        const contextJson = JSON.stringify(summarizedContext);
+        const contextMessage = `__CONTEXT_START__${contextJson}__CONTEXT_END__`;
+        
+        // Add summarized context to messages
+        messages.push({
+          role: "system",
+          content: contextMessage,
+        } as CoreMessage);
+      }
+    } else {
+      // For orchestrator, keep full context for comprehensive planning
+      this.contextManager.embedContextInMessages(messages);
+    }
 
     try {
       // Execute with appropriate provider
@@ -210,24 +349,77 @@ export class BaseAgent {
       "system",
     );
 
-    const response = await generateText({
-      model,
-      providerOptions: this.getProviderOptions(),
-      tools: this.getContextAwareTools(),
-      maxSteps: this.config.maxSteps || 10,
-      messages,
-    });
+    const maxRetries = 3;
+    let retryCount = 0;
+    let lastError: Error | null = null;
+    
+    // Retry logic with exponential backoff
+    while (retryCount < maxRetries) {
+      try {
+        const response = await generateText({
+          model,
+          providerOptions: this.getProviderOptions(),
+          tools: this.getContextAwareTools(),
+          maxSteps: this.config.maxSteps || 10,
+          messages,
+        });
 
-    const { text } = response;
+        const { text } = response;
 
-    // Track token usage
-    this.trackTokenUsage(response);
+        // Track token usage
+        this.trackTokenUsage(response);
 
-    log(
-      `[${this.config.name}] Response generated successfully (${text.length} chars)`,
-      "system",
-    );
-    return text;
+        log(
+          `[${this.config.name}] Response generated successfully (${text.length} chars)`,
+          "system",
+        );
+        return text;
+      } catch (error) {
+        lastError = error instanceof Error ? error : new Error(String(error));
+        
+        // Check if it's a rate limit error
+        const errorMessage = lastError.message;
+        if (errorMessage.includes("Rate limit") || errorMessage.includes("rate_limit")) {
+          retryCount++;
+          
+          // Extract wait time from error message if available, otherwise use exponential backoff
+          let waitTime = 0;
+          const waitTimeMatch = errorMessage.match(/try again in (\d+)ms/i);
+          if (waitTimeMatch && waitTimeMatch[1]) {
+            waitTime = parseInt(waitTimeMatch[1], 10);
+            // Add a small buffer to the suggested wait time
+            waitTime += 100;
+          } else {
+            // Exponential backoff with jitter: 2^retryCount * 1000 + random(0-1000)ms
+            waitTime = Math.pow(2, retryCount) * 1000 + Math.random() * 1000;
+          }
+          
+          log(
+            `[${this.config.name}] Rate limit hit, retrying in ${waitTime}ms (attempt ${retryCount}/${maxRetries})`,
+            "system"
+          );
+          
+          // Wait for the specified time
+          await new Promise(resolve => setTimeout(resolve, waitTime));
+          continue;
+        }
+        
+        // If it's not a rate limit error, throw immediately
+        throw error;
+      }
+    }
+    
+    // If we've exhausted retries, throw the last error
+    if (lastError) {
+      log(
+        `[${this.config.name} Error] Failed after ${maxRetries} attempts. Last error: ${lastError.message}`,
+        "error"
+      );
+      throw new Error(`Failed after ${maxRetries} attempts. Last error: ${lastError.message}`);
+    }
+    
+    // This should never happen but TypeScript needs it
+    throw new Error("Unexpected execution path in executeStandard");
   }
 
   /**
@@ -240,56 +432,106 @@ export class BaseAgent {
       "system",
     );
 
-    const stream = streamText({
-      model,
-      providerOptions: this.getProviderOptions(),
-      tools: this.getContextAwareTools(),
-      maxSteps: this.config.maxSteps || 10,
-      messages,
-    });
+    const maxRetries = 3;
+    let retryCount = 0;
+    let lastError: Error | null = null;
+    
+    // Retry logic with exponential backoff
+    while (retryCount < maxRetries) {
+      try {
+        const stream = streamText({
+          model,
+          providerOptions: this.getProviderOptions(),
+          tools: this.getContextAwareTools(),
+          maxSteps: this.config.maxSteps || 10,
+          messages,
+        });
 
-    let fullText = "";
-    try {
-      // Handle the stream - since streamText is properly typed by Vercel AI SDK
-      // we need to work with it carefully
-      const streamResult = stream;
-      for await (const chunk of streamResult.textStream) {
-        fullText += chunk;
-        // Could implement UI updates here
+        let fullText = "";
+        // Handle the stream - since streamText is properly typed by Vercel AI SDK
+        // we need to work with it carefully
+        const streamResult = stream;
+        for await (const chunk of streamResult.textStream) {
+          fullText += chunk;
+          // Could implement UI updates here
+        }
+
+        // Token usage is not available with streaming, so estimate
+        const promptTokenEstimate = Math.ceil(
+          messages.reduce((acc, msg) => {
+            const content = msg.content;
+            // Handle content that might be a string or an array of parts
+            return acc + (typeof content === "string" ? content.length : 200);
+          }, 0) / 4,
+        );
+        const completionTokenEstimate = Math.ceil(fullText.length / 4);
+        this.tokenTracker.recordTokenUsage(
+          this.config.name,
+          promptTokenEstimate,
+          completionTokenEstimate,
+          this.config.model,
+        );
+
+        // Update context with estimated token usage
+        this.contextManager.updateTokenUsage(
+          this.config.name,
+          promptTokenEstimate,
+          completionTokenEstimate,
+          this.config.model,
+        );
+
+        log(
+          `[${this.config.name}] Stream completed successfully (${fullText.length} chars)`,
+          "system",
+        );
+        return fullText;
+      } catch (error) {
+        lastError = error instanceof Error ? error : new Error(String(error));
+        
+        // Check if it's a rate limit error
+        const errorMessage = lastError.message;
+        if (errorMessage.includes("Rate limit") || errorMessage.includes("rate_limit")) {
+          retryCount++;
+          
+          // Extract wait time from error message if available, otherwise use exponential backoff
+          let waitTime = 0;
+          const waitTimeMatch = errorMessage.match(/try again in (\d+)ms/i);
+          if (waitTimeMatch && waitTimeMatch[1]) {
+            waitTime = parseInt(waitTimeMatch[1], 10);
+            // Add a small buffer to the suggested wait time
+            waitTime += 100;
+          } else {
+            // Exponential backoff with jitter: 2^retryCount * 1000 + random(0-1000)ms
+            waitTime = Math.pow(2, retryCount) * 1000 + Math.random() * 1000;
+          }
+          
+          log(
+            `[${this.config.name}] Rate limit hit, retrying streaming in ${waitTime}ms (attempt ${retryCount}/${maxRetries})`,
+            "system"
+          );
+          
+          // Wait for the specified time
+          await new Promise(resolve => setTimeout(resolve, waitTime));
+          continue;
+        }
+        
+        // If it's not a rate limit error, log and rethrow
+        log(`[${this.config.name}] Stream error: ${lastError.message}`, "error");
+        throw lastError;
       }
-    } catch (error) {
-      log(`[${this.config.name}] Stream error: ${error}`, "error");
     }
-
-    // Token usage is not available with streaming, so estimate
-    const promptTokenEstimate = Math.ceil(
-      messages.reduce((acc, msg) => {
-        const content = msg.content;
-        // Handle content that might be a string or an array of parts
-        return acc + (typeof content === "string" ? content.length : 200);
-      }, 0) / 4,
-    );
-    const completionTokenEstimate = Math.ceil(fullText.length / 4);
-    this.tokenTracker.recordTokenUsage(
-      this.config.name,
-      promptTokenEstimate,
-      completionTokenEstimate,
-      this.config.model,
-    );
-
-    // Update context with estimated token usage
-    this.contextManager.updateTokenUsage(
-      this.config.name,
-      promptTokenEstimate,
-      completionTokenEstimate,
-      this.config.model,
-    );
-
-    log(
-      `[${this.config.name}] Stream completed successfully (${fullText.length} chars)`,
-      "system",
-    );
-    return fullText;
+    
+    // If we've exhausted retries, throw the last error
+    if (lastError) {
+      log(
+        `[${this.config.name} Error] Failed streaming after ${maxRetries} attempts. Last error: ${lastError.message}`,
+        "error"
+      );
+      throw new Error(`Failed streaming after ${maxRetries} attempts. Last error: ${lastError.message}`);
+    }
+    
+    // This should never happen but TypeScript needs it
+    throw new Error("Unexpected execution path in executeStreaming");
   }
 
   /**
@@ -343,34 +585,110 @@ export class BaseAgent {
         messages,
       };
 
-      const response = await generateObject(params);
-
-      // Track token usage
-      if (response.usage) {
-        this.tokenTracker.recordTokenUsage(
-          this.config.name,
-          response.usage.promptTokens || 0,
-          response.usage.completionTokens || 0,
-          this.config.model,
-        );
-
-        // Update context with token usage
-        this.contextManager.updateTokenUsage(
-          this.config.name,
-          response.usage.promptTokens || 0,
-          response.usage.completionTokens || 0,
-          this.config.model,
-        );
+      const maxRetries = 3;
+      let retryCount = 0;
+      let lastError: Error | null = null;
+      
+      // Retry logic with exponential backoff
+      while (retryCount < maxRetries) {
+        try {
+          const response = await generateObject(params);
+          
+          // Track token usage
+          if (response.usage) {
+            this.tokenTracker.recordTokenUsage(
+              this.config.name,
+              response.usage.promptTokens || 0,
+              response.usage.completionTokens || 0,
+              this.config.model,
+            );
+    
+            // Update context with token usage
+            this.contextManager.updateTokenUsage(
+              this.config.name,
+              response.usage.promptTokens || 0,
+              response.usage.completionTokens || 0,
+              this.config.model,
+            );
+          }
+    
+          log(
+            `[${this.config.name}] Structured response generated successfully`,
+            "system",
+          );
+          // We need to cast here because TypeScript doesn't know that the schema will validate to T
+          return response.object as T;
+        } catch (error) {
+          // Special handling for NoObjectGeneratedError - this is not a rate limit issue
+          // but a schema validation issue, so we should not retry
+          if (error instanceof NoObjectGeneratedError) {
+            log(
+              `[${this.config.name}] Failed to generate valid object. Partial output: ${error.text}`,
+              "error",
+            );
+            this.contextManager.recordError(
+              context.currentStep,
+              `Schema validation failed: ${error.message}`,
+              error.text,
+            );
+            throw error;
+          }
+          
+          // For other errors, check if it's rate limit related
+          lastError = error instanceof Error ? error : new Error(String(error));
+          const errorMessage = lastError.message;
+          
+          if (errorMessage.includes("Rate limit") || errorMessage.includes("rate_limit")) {
+            retryCount++;
+            
+            // Extract wait time from error message if available, otherwise use exponential backoff
+            let waitTime = 0;
+            const waitTimeMatch = errorMessage.match(/try again in (\d+)ms/i);
+            if (waitTimeMatch && waitTimeMatch[1]) {
+              waitTime = parseInt(waitTimeMatch[1], 10);
+              // Add a small buffer to the suggested wait time
+              waitTime += 100;
+            } else {
+              // Exponential backoff with jitter: 2^retryCount * 1000 + random(0-1000)ms
+              waitTime = Math.pow(2, retryCount) * 1000 + Math.random() * 1000;
+            }
+            
+            log(
+              `[${this.config.name}] Rate limit hit, retrying schema generation in ${waitTime}ms (attempt ${retryCount}/${maxRetries})`,
+              "system"
+            );
+            
+            // Wait for the specified time
+            await new Promise(resolve => setTimeout(resolve, waitTime));
+            continue;
+          }
+          
+          // If it's not a rate limit error, log and rethrow
+          log(
+            `[${this.config.name} Error] ${lastError.message}`,
+            "error",
+          );
+          this.contextManager.recordError(
+            context.currentStep,
+            lastError.message,
+          );
+          throw lastError;
+        }
       }
-
-      log(
-        `[${this.config.name}] Structured response generated successfully`,
-        "system",
-      );
-      // We need to cast here because TypeScript doesn't know that the schema will validate to T
-      return response.object as T;
+      
+      // If we've exhausted retries, throw the last error
+      if (lastError) {
+        log(
+          `[${this.config.name} Error] Failed schema generation after ${maxRetries} attempts. Last error: ${lastError.message}`,
+          "error"
+        );
+        throw new Error(`Failed after ${maxRetries} attempts. Last error: ${lastError.message}`);
+      }
+      
+      // This should never happen but TypeScript needs it
+      throw new Error("Unexpected execution path in executeWithSchema");
     } catch (error) {
-      // Handle NoObjectGeneratedError with recovery
+      // Handle NoObjectGeneratedError with recovery - this is already handled above, but catch other errors here
       if (error instanceof NoObjectGeneratedError) {
         log(
           `[${this.config.name}] Failed to generate valid object. Partial output: ${error.text}`,

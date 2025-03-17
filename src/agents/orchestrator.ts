@@ -251,6 +251,9 @@ export class OrchestratorAgent extends BaseAgent {
       // Check for memory updates that should happen after this step
       await this.checkAndPerformMemoryUpdates(nextStep.id);
 
+      // Evaluate if plan adaptation is needed based on current step result
+      await this.evaluateAndAdaptPlan(nextStep.id, stepResult);
+
       // Get next step
       nextStep = this.contextManager.getNextStep();
       executedStepCount++;
@@ -286,55 +289,9 @@ I need a concise summary of the following multi-step results:
 
 ${results.join("\n\n")}
 
-You should be concise, direct, and to the point. 
-Focus only on the most important findings and conclusions. The summary should be informative but brief and use common laguage and layman's term. 
-
-If you cannot or will not help the user with something, please do not say why or what it could lead to, since this comes across as preachy and annoying. Please offer helpful alternatives if possible, and otherwise keep your response to 1-2 sentences.
-IMPORTANT: You should minimize output tokens as much as possible while maintaining helpfulness, quality, and accuracy. Only address the specific query or task at hand, avoiding tangential information unless absolutely critical for completing the request. If you can answer in 1-3 sentences or a short paragraph, please do.
-IMPORTANT: You should NOT answer with unnecessary preamble or postamble (such as explaining your code or summarizing your action), unless the user asks you to.
-IMPORTANT: Keep your responses short, since they will be displayed on a command line interface. You MUST answer concisely with fewer than 4 lines (not including tool use or code generation), unless user asks for detail. Answer the user's question directly, without elaboration, explanation, or details. One word answers are best. Avoid introductions, conclusions, and explanations. You MUST avoid text before/after your response, such as "The answer is <answer>.", "Here is the content of the file..." or "Based on the information provided, the answer is..." or "Here is what I will do next...". Here are some examples to demonstrate appropriate verbosity:
-<example>
-user: 2 + 2
-assistant: 4
-</example>
-
-<example>
-user: what is 2+2?
-assistant: 4
-</example>
-
-<example>
-user: is 11 a prime number?
-assistant: true
-</example>
-
-<example>
-user: what command should I run to list files in the current directory?
-assistant: ls
-</example>
-
-<example>
-user: what command should I run to watch files in the current directory?
-assistant: [use the ls tool to list the files in the current directory, then read docs/commands in the relevant file to find out how to watch files]
-npm run dev
-</example>
-
-<example>
-user: How many golf balls fit inside a jetta?
-assistant: 150000
-</example>
-
-<example>
-user: what files are in the directory src/?
-assistant: [runs ls and sees foo.c, bar.c, baz.c]
-user: which file contains the implementation of foo?
-assistant: src/foo.c
-</example>
-
-<example>
-user: write tests for new feature
-assistant: [uses grep and glob search tools to find where similar tests are defined, uses concurrent read file tool use blocks in one tool call to read relevant files at the same time, uses edit file tool to write new tests]
-</example>
+You should be concise, direct, and to the point. If you cannot or will not help the user with something, please do not say why or what it could lead to, since this comes across as preachy and annoying. Please offer helpful alternatives if possible.
+IMPORTANT: You should minimize output tokens as much as possible while maintaining helpfulness, quality, and accuracy. Only address the specific query or task at hand, avoiding tangential information unless absolutely critical for completing the request.
+IMPORTANT: Do not need to inform user that the documentation is updated. Documentation is only meant for easy retrival for the future query.
 `;
 
       const summary = await verificationAgent.execute(summarizationPrompt);
@@ -535,6 +492,241 @@ assistant: [uses grep and glob search tools to find where similar tests are defi
   }
 
   /**
+   * Evaluate if plan adaptation is needed based on step results
+   * This method analyzes the result of the current step and determines if
+   * the plan should be modified for more robust findings
+   */
+  private async evaluateAndAdaptPlan(
+    stepId: number,
+    stepResult: string,
+  ): Promise<void> {
+    log(
+      `[Orchestrator] Evaluating plan adaptation after step ${stepId}`,
+      "system",
+    );
+
+    const context = this.contextManager.getContext();
+    if (!context || !context.plan) return;
+
+    try {
+      // Get verification agent to help with evaluation
+      const { getAgent } = await import("./registry.js");
+      const verificationAgent = getAgent("verification");
+
+      // Gather all completed steps so far for context
+      const completedSteps = context.plan.steps
+        .filter((step) => step.completed && step.result)
+        .map(
+          (step) =>
+            `Step ${step.id} (${step.agent}): ${step.description}\nResult: ${step.result || "No result"}`,
+        );
+
+      // Get remaining steps
+      const remainingSteps = context.plan.steps
+        .filter((step) => !step.completed)
+        .map((step) => `Step ${step.id} (${step.agent}): ${step.description}`);
+
+      // If there are no remaining steps, no adaptation needed
+      if (remainingSteps.length === 0) {
+        log(
+          `[Orchestrator] No remaining steps, skipping plan adaptation`,
+          "system",
+        );
+        return;
+      }
+
+      // Build adaptation evaluation prompt
+      const evaluationPrompt = `
+You are tasked with evaluating if the current execution plan needs adaptation based on results so far.
+Review the completed steps and their results to determine if the remaining plan steps are still optimal
+or if modifications (adding, removing, or reordering steps) would lead to more robust findings.
+
+COMPLETED STEPS:
+${completedSteps.join("\n\n")}
+
+MOST RECENT STEP (${stepId}) RESULT:
+${stepResult}
+
+REMAINING PLAN STEPS:
+${remainingSteps.join("\n")}
+
+TASK: Determine if plan adaptation is needed by answering these questions:
+1. Does the most recent step result reveal any unexpected information or errors?
+2. Are there any new search paths or investigation avenues that should be explored?
+3. Are any of the remaining steps now redundant or no longer necessary?
+4. Are there any critical steps missing from the remaining plan?
+5. For code features found in the search, do we need additional steps to trace both implementation AND usage to get end-to-end understanding?
+6. Should we add steps to find related files like tests, configuration, or dependent components that would provide a more complete picture?
+
+Provide your evaluation and specific plan adaptation recommendations in this JSON format:
+{
+  "adaptationNeeded": boolean,
+  "reason": string,
+  "modifications": [
+    // For remove actions (no newStep needed):
+    {
+      "action": "remove",
+      "stepId": number // The step ID to remove
+    },
+    // For add actions (newStep required):
+    {
+      "action": "add",
+      "stepId": number, // The step ID after which to insert
+      "newStep": {
+        "description": string,
+        "agent": string, // One of: "search", "memory", "command", "verification", "userIntent"
+        "dependencies": number[]
+      }
+    },
+    // For modify actions (newStep required):
+    {
+      "action": "modify",
+      "stepId": number, // The step ID to modify
+      "newStep": {
+        "description": string,
+        "agent": string, // One of: "search", "memory", "command", "verification", "userIntent"
+        "dependencies": number[]
+      }
+    }
+  ]
+}
+
+Only recommend adaptations if they are likely to significantly improve the investigation quality.
+Otherwise, return "adaptationNeeded": false.
+`;
+
+      // Get evaluation from verification agent
+      // We need to create a schema that doesn't use .optional() or .default()
+      const evaluationResult = await verificationAgent.executeWithSchema(
+        evaluationPrompt,
+        z.object({
+          adaptationNeeded: z.boolean(),
+          reason: z.string(),
+          // Instead of making the whole array optional, we'll always require it but allow empty array
+          modifications: z.array(
+            z.union([
+              // For 'remove' action (doesn't need newStep)
+              z.object({
+                action: z.literal("remove"),
+                stepId: z.number(),
+              }),
+              // For 'add' or 'modify' actions (requires newStep)
+              z.object({
+                action: z.union([z.literal("add"), z.literal("modify")]),
+                stepId: z.number(),
+                newStep: z.object({
+                  description: z.string(),
+                  agent: z.string(),
+                  dependencies: z.array(z.number()),
+                }),
+              }),
+            ]),
+          ),
+        }),
+      );
+
+      // If no adaptation needed, log and return
+      if (!evaluationResult.adaptationNeeded) {
+        log(
+          `[Orchestrator] No plan adaptation needed: ${evaluationResult.reason}`,
+          "system",
+        );
+        return;
+      }
+
+      // Log that adaptation is needed
+      log(
+        `[Orchestrator] Plan adaptation needed: ${evaluationResult.reason}`,
+        "system",
+      );
+
+      // Apply modifications if any
+      if (evaluationResult.modifications.length > 0) {
+        log(
+          `[Orchestrator] Applying ${evaluationResult.modifications.length} plan modifications`,
+          "system",
+        );
+
+        // Apply each modification
+        for (const mod of evaluationResult.modifications) {
+          if (mod.action === "remove") {
+            // Remove step
+            const stepIndex = context.plan.steps.findIndex(
+              (step) => step.id === mod.stepId,
+            );
+            if (stepIndex !== -1 && !context.plan.steps[stepIndex].completed) {
+              const removedStep = context.plan.steps.splice(stepIndex, 1)[0];
+              log(
+                `[Orchestrator] Removed step ${removedStep.id}: ${removedStep.description}`,
+                "system",
+              );
+
+              // Update dependencies for other steps
+              context.plan.steps.forEach((step) => {
+                step.dependencies = step.dependencies.filter(
+                  (depId) => depId !== mod.stepId,
+                );
+              });
+            }
+          } else if (mod.action === "add") {
+            // Add new step with ID higher than any existing step
+            const maxId = context.plan.steps.reduce(
+              (max, step) => Math.max(max, step.id),
+              0,
+            );
+            const newId = maxId + 1;
+
+            // With our updated schema, newStep will always be present for 'add' action
+            const newStep = {
+              id: newId,
+              description: mod.newStep.description,
+              agent: mod.newStep.agent,
+              dependencies: mod.newStep.dependencies,
+              completed: false,
+              result: null,
+            };
+
+            context.plan.steps.push(newStep);
+            log(
+              `[Orchestrator] Added new step ${newId}: ${newStep.description}`,
+              "system",
+            );
+          } else if (mod.action === "modify") {
+            // Modify existing step if not completed
+            const stepIndex = context.plan.steps.findIndex(
+              (step) => step.id === mod.stepId,
+            );
+            if (stepIndex !== -1 && !context.plan.steps[stepIndex].completed) {
+              const oldDesc = context.plan.steps[stepIndex].description;
+              // With our updated schema, newStep will always be present for 'modify' action
+              context.plan.steps[stepIndex].description =
+                mod.newStep.description;
+              context.plan.steps[stepIndex].agent = mod.newStep.agent;
+              context.plan.steps[stepIndex].dependencies =
+                mod.newStep.dependencies;
+
+              log(
+                `[Orchestrator] Modified step ${mod.stepId} from "${oldDesc}" to "${mod.newStep.description}"`,
+                "system",
+              );
+            }
+          }
+        }
+
+        // Update the context manager with modified plan
+        this.contextManager.setPlan(context.plan);
+      }
+    } catch (error) {
+      const errorMessage =
+        error instanceof Error ? error.message : String(error);
+      log(
+        `[Orchestrator] Error during plan adaptation: ${errorMessage}`,
+        "error",
+      );
+    }
+  }
+
+  /**
    * Build context information from completed dependency steps
    */
   private buildDependencyContext(stepId: number): string {
@@ -559,7 +751,13 @@ assistant: [uses grep and glob search tools to find where similar tests are defi
       return `Step ${dep.id} (${dep.agent}): ${dep.description}\nResult: ${dep.result || "No result"}\n\n`;
     });
 
-    return `Previous steps results:\n\n${contextParts.join("")}`;
+    // Include a summary of the current task and plan
+    const planSummary = `
+Task Category: ${context.plan.taskCategory}
+Current Step: ${stepId} of ${context.plan.steps.length}
+`;
+
+    return `Plan Summary:${planSummary}\n\nPrevious steps results:\n\n${contextParts.join("")}`;
   }
 }
 
@@ -648,6 +846,9 @@ For each request, produce:
 10. For GitHub-related requests: Use \`gh\` CLI commands with appropriate filters and formatting
 11. NEVER search codebase for GitHub issues - use \`gh issue list\` or \`gh issue view\` commands instead
 12. For requests requiring up-to-date information: Include web search steps using websearch agent
+13. CRITICAL: Always trace code from end-to-end by finding both implementations AND references/usages
+14. For functions/classes/methods, include steps to search for both definitions AND where they're called/imported
+15. Add steps to locate related tests, configurations, and dependent components for complete understanding
 
 ## WEB SEARCH DETECTION RULES
 IMPORTANT: Be vigilant in detecting when web search is appropriate. Include a web search step when user's request:

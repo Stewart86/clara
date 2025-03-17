@@ -6,10 +6,9 @@ import { writeMemory, createDirectory } from "../tools/memoryWriter.js";
 import { readMemory } from "../tools/memoryReader.js";
 import { readFile } from "../tools/fileReader.js";
 import { getMemoryIndexer } from "../tools/memoryIndex.js";
-import { resolveMemoryPaths } from "../tools/memoryUtils.js";
-import path from "path";
 
-const getMemoryAgentSystemPrompt = (): string => `You are a specialized Memory Management Agent for Clara, responsible for organizing and managing Clara's knowledge base in an optimized way.
+const getMemoryAgentSystemPrompt =
+  (): string => `You are a specialized Memory Management Agent for Clara, responsible for organizing and managing Clara's knowledge base in an optimized way.
 
 Your primary responsibilities are:
 1. Categorizing information into the appropriate memory structure
@@ -19,6 +18,8 @@ Your primary responsibilities are:
 5. Managing cross-references between related memory files
 6. Utilizing the memory index system for efficient search and retrieval
 7. Maintaining relationship networks between related memory files
+8. Proactively storing important project information for future reference
+9. Ensuring consistent memory formatting and organization
 
 ## Memory Structure
 
@@ -94,6 +95,18 @@ You can use these special indexing tools:
 10. Include creation and update timestamps in the frontmatter
 11. Always save memory files with the .md extension
 12. Create bidirectional relationships between related files
+
+## Proactive Memory Management
+
+When working with Clara:
+1. ALWAYS document important information about the project in the appropriate memory directory
+2. After completing tasks that reveal significant information about the codebase, update memory with what you've learned
+3. Before performing searches in the codebase, ALWAYS check memory first to see if relevant information exists
+4. Store common commands (build, test, lint, typecheck) in preferences/commands.md for future reference
+5. When learning about code style preferences, document them in appropriate memory files
+6. For important technical details, create thorough documentation with examples
+7. Ensure all business logic is well documented in the business/ directory
+8. Maintain consistent formatting across all memory files
 `;
 
 /**
@@ -105,8 +118,12 @@ const MemoryMetadataSchema = z.object({
   updated: z.string().describe("Last update timestamp in ISO format"),
   tags: z.array(z.string()).describe("Relevant tags for searchability"),
   related: z.array(z.string()).describe("Related memory file paths"),
-  summary: z.union([z.string(), z.null()]).describe("Brief summary of the content"),
-  importance: z.union([z.enum(["low", "medium", "high"]), z.null()]).describe("Importance level of this information"),
+  summary: z
+    .union([z.string(), z.null()])
+    .describe("Brief summary of the content"),
+  importance: z
+    .union([z.enum(["low", "medium", "high"]), z.null()])
+    .describe("Importance level of this information"),
   source: z.union([z.string(), z.null()]).describe("Source of the information"),
 });
 
@@ -114,20 +131,38 @@ const MemoryMetadataSchema = z.object({
  * Schema for memory organization operations
  */
 const MemoryOrganizationSchema = z.object({
-  directories: z.array(z.object({
-    path: z.string().describe("Path to create within the memory system"),
-    purpose: z.string().describe("Description of what this directory will contain"),
-  })),
-  files: z.array(z.object({
-    path: z.string().describe("Path where the file should be stored"),
-    metadata: MemoryMetadataSchema,
-    content: z.string().describe("The markdown content of the memory file (without frontmatter)"),
-  })),
-  consolidations: z.array(z.object({
-    sourcePaths: z.array(z.string()).describe("Paths of files to consolidate"),
-    targetPath: z.string().describe("Path where the consolidated information should be stored"),
-    reason: z.string().describe("Reason for consolidation"),
-  })).describe("Consolidation operations for merging related information"),
+  directories: z.array(
+    z.object({
+      path: z.string().describe("Path to create within the memory system"),
+      purpose: z
+        .string()
+        .describe("Description of what this directory will contain"),
+    }),
+  ),
+  files: z.array(
+    z.object({
+      path: z.string().describe("Path where the file should be stored"),
+      metadata: MemoryMetadataSchema,
+      content: z
+        .string()
+        .describe(
+          "The markdown content of the memory file (without frontmatter)",
+        ),
+    }),
+  ),
+  consolidations: z
+    .array(
+      z.object({
+        sourcePaths: z
+          .array(z.string())
+          .describe("Paths of files to consolidate"),
+        targetPath: z
+          .string()
+          .describe("Path where the consolidated information should be stored"),
+        reason: z.string().describe("Reason for consolidation"),
+      }),
+    )
+    .describe("Consolidation operations for merging related information"),
 });
 
 /**
@@ -137,10 +172,17 @@ const MemoryOrganizationSchema = z.object({
 export class MemoryAgent extends BaseAgent {
   constructor() {
     const readMemoryTool = aiTool({
-      description: "Lists all memory files available in a specified directory of Clara's memory system",
+      description:
+        "Lists all memory files available in a specified directory of Clara's memory system",
       parameters: z.object({
-        memoryPath: z.string().describe("Simple relative path to memory directory. For example: 'codebase', 'insights', 'technical'"),
-        projectPath: z.string().describe("Project path if different from current project"),
+        memoryPath: z
+          .string()
+          .describe(
+            "Simple relative path to memory directory. For example: 'codebase', 'insights', 'technical'",
+          ),
+        projectPath: z
+          .string()
+          .describe("Project path if different from current project"),
       }),
       execute: async ({ memoryPath, projectPath }) => {
         return await readMemory(memoryPath || "", projectPath || "");
@@ -148,11 +190,18 @@ export class MemoryAgent extends BaseAgent {
     });
 
     const writeMemoryTool = aiTool({
-      description: "Creates or updates a memory file in Clara's knowledge system",
+      description:
+        "Creates or updates a memory file in Clara's knowledge system",
       parameters: z.object({
-        filePath: z.string().describe("Simple relative path to the memory file. For example: 'codebase/routes.md'"),
+        filePath: z
+          .string()
+          .describe(
+            "Simple relative path to the memory file. For example: 'codebase/routes.md'",
+          ),
         content: z.string().describe("Content to write to the memory file"),
-        projectPath: z.string().describe("Project path if different from current project"),
+        projectPath: z
+          .string()
+          .describe("Project path if different from current project"),
       }),
       execute: async ({ filePath, content, projectPath }) => {
         return await writeMemory(filePath, content, projectPath || "");
@@ -162,72 +211,130 @@ export class MemoryAgent extends BaseAgent {
     const createDirectoryTool = aiTool({
       description: "Creates a new directory in Clara's memory system",
       parameters: z.object({
-        dirPath: z.string().describe("Simple relative path to the directory to create. For example: 'codebase/routes'"),
-        projectPath: z.string().describe("Project path if different from current project"),
+        dirPath: z
+          .string()
+          .describe(
+            "Simple relative path to the directory to create. For example: 'codebase/routes'",
+          ),
+        projectPath: z
+          .string()
+          .describe("Project path if different from current project"),
       }),
       execute: async ({ dirPath, projectPath }) => {
         return await createDirectory(dirPath, projectPath || "");
       },
     });
-    
+
     const readFileTool = aiTool({
       description: "Reads the contents of a specified file",
       parameters: z.object({
-        filePath: z.string().describe("Name or path of the file to read (can be partial or full path)"),
-        directory: z.string().describe("Directory to search in (defaults to current directory if empty)"),
-        lineRange: z.union([
-          z.object({
-            start: z.number().describe("Start line number"),
-            end: z.number().describe("End line number"),
-          }),
-          z.null()
-        ]).describe('Range of lines to read, e.g. { "start": 10, "end": 20 }'),
-        readEntireFile: z.boolean().describe("Force reading the entire file, even if it's large"),
+        filePath: z
+          .string()
+          .describe(
+            "Name or path of the file to read (can be partial or full path)",
+          ),
+        directory: z
+          .string()
+          .describe(
+            "Directory to search in (defaults to current directory if empty)",
+          ),
+        lineRange: z
+          .union([
+            z.object({
+              start: z.number().describe("Start line number"),
+              end: z.number().describe("End line number"),
+            }),
+            z.null(),
+          ])
+          .describe('Range of lines to read, e.g. { "start": 10, "end": 20 }'),
+        readEntireFile: z
+          .boolean()
+          .describe("Force reading the entire file, even if it's large"),
       }),
       execute: async ({ filePath, directory, lineRange, readEntireFile }) => {
-        return await readFile(filePath, directory || ".", lineRange || undefined, readEntireFile || false);
+        return await readFile(
+          filePath,
+          directory || ".",
+          lineRange || undefined,
+          readEntireFile || false,
+        );
       },
     });
-    
+
     const searchMemoryTool = aiTool({
       description: "Searches Clara's memory system using the enhanced index",
       parameters: z.object({
-        query: z.string().describe("Search query to find relevant memory files"),
-        projectPath: z.string().describe("Project path if different from current project"),
+        query: z
+          .string()
+          .describe("Search query to find relevant memory files"),
+        projectPath: z
+          .string()
+          .describe("Project path if different from current project"),
       }),
       execute: async ({ query, projectPath }) => {
-        const self = new MemoryAgent();
-        return await self.findRelatedMemory(query, projectPath || "");
+        try {
+          const self = new MemoryAgent();
+          // Ensure context is initialized before use
+          if (!self.contextManager.getContext()) {
+            self.contextManager.createContext();
+          }
+          return await self.findRelatedMemory(query, projectPath || "");
+        } catch (error) {
+          log(`[searchMemoryTool] Error executing tool: ${error}`, "error");
+          return `Error searching memory: ${error instanceof Error ? error.message : String(error)}`;
+        }
       },
     });
-    
+
     const relationshipGraphTool = aiTool({
       description: "Generates a graph of relationships between memory files",
       parameters: z.object({
-        projectPath: z.string().describe("Project path if different from current project"),
+        projectPath: z
+          .string()
+          .describe("Project path if different from current project"),
       }),
       execute: async ({ projectPath }) => {
-        const self = new MemoryAgent();
-        return await self.generateRelationshipGraph(projectPath || "");
+        try {
+          const self = new MemoryAgent();
+          // Ensure context is initialized before use
+          if (!self.contextManager.getContext()) {
+            self.contextManager.createContext();
+          }
+          return await self.generateRelationshipGraph(projectPath || "");
+        } catch (error) {
+          log(`[relationshipGraphTool] Error executing tool: ${error}`, "error");
+          return `Error generating relationship graph: ${error instanceof Error ? error.message : String(error)}`;
+        }
       },
     });
-    
+
     const rebuildIndexTool = aiTool({
       description: "Rebuilds the memory index for improved search",
       parameters: z.object({
-        projectPath: z.string().describe("Project path if different from current project"),
+        projectPath: z
+          .string()
+          .describe("Project path if different from current project"),
       }),
       execute: async ({ projectPath }) => {
-        const self = new MemoryAgent();
-        return await self.rebuildIndex(projectPath || "");
+        try {
+          const self = new MemoryAgent();
+          // Ensure context is initialized before use
+          if (!self.contextManager.getContext()) {
+            self.contextManager.createContext();
+          }
+          return await self.rebuildIndex(projectPath || "");
+        } catch (error) {
+          log(`[rebuildIndexTool] Error executing tool: ${error}`, "error");
+          return `Error rebuilding memory index: ${error instanceof Error ? error.message : String(error)}`;
+        }
       },
     });
 
     const config: AgentConfig = {
-      name: 'memory',
-      description: 'Memory Management and Organization Agent',
-      provider: 'openai',
-      model: 'o3-mini',
+      name: "memory",
+      description: "Memory Management and Organization Agent",
+      provider: "openai",
+      model: "gpt-4o-mini",
       systemPrompt: getMemoryAgentSystemPrompt(),
       tools: {
         readMemoryTool,
@@ -239,7 +346,7 @@ export class MemoryAgent extends BaseAgent {
         rebuildIndexTool,
       },
       maxSteps: 20,
-      reasoningEffort: 'medium',
+      reasoningEffort: "medium",
     };
 
     super(config);
@@ -248,12 +355,20 @@ export class MemoryAgent extends BaseAgent {
   /**
    * Organize a new piece of information into the memory system
    */
-  public async organizeInformation(content: string, category: string, sourcePath?: string): Promise<string> {
+  public async organizeInformation(
+    content: string,
+    category: string,
+    sourcePath?: string,
+  ): Promise<string> {
     // Initialize operation in context
-    const context = this.contextManager.getContext() || this.contextManager.createContext();
-    
-    log(`[MemoryAgent] Organizing information in category: ${category}`, "system");
-    
+    const context =
+      this.contextManager.getContext() || this.contextManager.createContext();
+
+    log(
+      `[MemoryAgent] Organizing information in category: ${category}`,
+      "system",
+    );
+
     let prompt = `I need to organize the following information into Clara's memory system under the '${category}' category.
 
 Information to store:
@@ -261,7 +376,7 @@ Information to store:
 ${content}
 ---
 
-${sourcePath ? `This information was extracted from: ${sourcePath}` : ''}
+${sourcePath ? `This information was extracted from: ${sourcePath}` : ""}
 
 Please:
 1. Analyze the content to understand its topic and importance
@@ -277,7 +392,7 @@ Return a detailed plan of your organization strategy in JSON format according to
       // Generate the organization strategy
       const organization = await this.executeWithSchema(
         prompt,
-        MemoryOrganizationSchema
+        MemoryOrganizationSchema,
       );
 
       // Execute the organization plan
@@ -295,10 +410,10 @@ Return a detailed plan of your organization strategy in JSON format according to
       for (const file of organization.files) {
         // Create the frontmatter
         const frontmatter = this.generateFrontmatter(file.metadata);
-        
+
         // Combine frontmatter and content
         const fullContent = `${frontmatter}\n\n${file.content}`;
-        
+
         log(`[MemoryAgent] Writing file: ${file.path}`, "system");
         const result = await writeMemory(file.path, fullContent, "");
         results.push(`File ${file.path}: ${result}`);
@@ -309,14 +424,14 @@ Return a detailed plan of your organization strategy in JSON format according to
       const summary = `Successfully organized information into memory:
 - Created ${organization.directories.length} directories
 - Created/updated ${organization.files.length} files
-- Files: ${organization.files.map(f => f.path).join(", ")}`;
-      
+- Files: ${organization.files.map((f) => f.path).join(", ")}`;
+
       log(`[MemoryAgent] ${summary}`, "system");
       return summary;
     } catch (error) {
       log(
         `[MemoryAgent Error] ${error instanceof Error ? error.message : String(error)}`,
-        "error"
+        "error",
       );
       return `Error organizing information: ${error instanceof Error ? error.message : String(error)}`;
     }
@@ -327,114 +442,145 @@ Return a detailed plan of your organization strategy in JSON format according to
    */
   private generateFrontmatter(metadata: any): string {
     let frontmatter = "---\n";
-    
+
     // Add required fields
     frontmatter += `title: ${metadata.title}\n`;
     frontmatter += `created: ${metadata.created}\n`;
     frontmatter += `updated: ${metadata.updated}\n`;
-    
+
     // Add tags
     frontmatter += `tags: [${metadata.tags.join(", ")}]\n`;
-    
+
     // Add optional fields if present
     if (metadata.related && metadata.related.length > 0) {
       frontmatter += `related: [${metadata.related.join(", ")}]\n`;
     }
-    
+
     if (metadata.summary) {
       frontmatter += `summary: ${metadata.summary}\n`;
     }
-    
+
     if (metadata.importance) {
       frontmatter += `importance: ${metadata.importance}\n`;
     }
-    
+
     if (metadata.source) {
       frontmatter += `source: ${metadata.source}\n`;
     }
-    
+
     frontmatter += "---";
-    
+
     return frontmatter;
   }
-  
+
   /**
    * Search for specific information across the memory system
    */
-  public async findRelatedMemory(query: string, projectPath: string = ""): Promise<string> {
+  public async findRelatedMemory(
+    query: string,
+    projectPath: string = "",
+  ): Promise<string> {
     log(`[MemoryAgent] Searching for related memory: ${query}`, "system");
-    
+
     try {
       // First try to use the memory indexer
       const indexer = getMemoryIndexer();
-      const searchResults = await indexer.search(query, projectPath);
       
-      if (searchResults.length > 0) {
-        // Format the results
-        let response = `# Memory Search Results for "${query}"\n\n`;
-        
-        // Group by relevance
-        const highRelevance = searchResults.filter(r => r.score >= 10);
-        const mediumRelevance = searchResults.filter(r => r.score >= 5 && r.score < 10);
-        const lowRelevance = searchResults.filter(r => r.score > 0 && r.score < 5);
-        
-        // Display high relevance results
-        if (highRelevance.length > 0) {
-          response += `## Highly Relevant Results\n\n`;
-          for (const result of highRelevance) {
-            response += `### ${result.entry.title}\n`;
-            response += `- **Path:** ${result.entry.path}\n`;
-            if (result.entry.summary) {
-              response += `- **Summary:** ${result.entry.summary}\n`;
-            }
-            response += `- **Tags:** ${result.entry.tags.join(', ')}\n`;
-            response += `- **Created:** ${new Date(result.entry.created).toLocaleDateString()}\n`;
-            response += `- **Updated:** ${new Date(result.entry.updated).toLocaleDateString()}\n\n`;
-          }
-        }
-        
-        // Display medium relevance results
-        if (mediumRelevance.length > 0) {
-          response += `## Related Results\n\n`;
-          for (const result of mediumRelevance) {
-            response += `- **${result.entry.title}** (${result.entry.path}) - ${result.entry.summary || 'No summary'}\n`;
-          }
-          response += '\n';
-        }
-        
-        // Mention low relevance results
-        if (lowRelevance.length > 0) {
-          response += `## Additional Results\n\n`;
-          response += `- ${lowRelevance.map(r => r.entry.path).join('\n- ')}\n\n`;
-        }
-        
-        // Show related files
-        if (highRelevance.length > 0) {
-          try {
-            const relatedResults = await indexer.getRelated(highRelevance[0].entry.path, projectPath);
-            
-            if (relatedResults.length > 0) {
-              response += `## Related Information\n\nThese files might also be relevant to your query:\n\n`;
-              
-              for (const related of relatedResults.slice(0, 5)) {
-                response += `- **${related.entry.title}** (${related.entry.path}) - ${related.entry.summary || 'No summary'}\n`;
+      // Make sure we have a valid context
+      const context = this.contextManager.getContext() || this.contextManager.createContext();
+      
+      try {
+        const searchResults = await indexer.search(query, projectPath);
+
+        if (searchResults && searchResults.length > 0) {
+          // Format the results
+          let response = `# Memory Search Results for "${query}"\n\n`;
+
+          // Group by relevance
+          const highRelevance = searchResults.filter((r) => r.score >= 10);
+          const mediumRelevance = searchResults.filter(
+            (r) => r.score >= 5 && r.score < 10,
+          );
+          const lowRelevance = searchResults.filter(
+            (r) => r.score > 0 && r.score < 5,
+          );
+
+          // Display high relevance results
+          if (highRelevance.length > 0) {
+            response += `## Highly Relevant Results\n\n`;
+            for (const result of highRelevance) {
+              response += `### ${result.entry.title}\n`;
+              response += `- **Path:** ${result.entry.path}\n`;
+              if (result.entry.summary) {
+                response += `- **Summary:** ${result.entry.summary}\n`;
               }
-              response += '\n';
+              response += `- **Tags:** ${result.entry.tags.join(", ")}\n`;
+              response += `- **Created:** ${new Date(result.entry.created).toLocaleDateString()}\n`;
+              response += `- **Updated:** ${new Date(result.entry.updated).toLocaleDateString()}\n\n`;
             }
-          } catch (error) {
-            log(`[MemoryAgent] Error getting related files: ${error}`, "error");
           }
+
+          // Display medium relevance results
+          if (mediumRelevance.length > 0) {
+            response += `## Related Results\n\n`;
+            for (const result of mediumRelevance) {
+              response += `- **${result.entry.title}** (${result.entry.path}) - ${result.entry.summary || "No summary"}\n`;
+            }
+            response += "\n";
+          }
+
+          // Mention low relevance results
+          if (lowRelevance.length > 0) {
+            response += `## Additional Results\n\n`;
+            response += `- ${lowRelevance.map((r) => r.entry.path).join("\n- ")}\n\n`;
+          }
+
+          // Show related files
+          if (highRelevance.length > 0) {
+            try {
+              const relatedResults = await indexer.getRelated(
+                highRelevance[0].entry.path,
+                projectPath,
+              );
+
+              if (relatedResults && relatedResults.length > 0) {
+                response += `## Related Information\n\nThese files might also be relevant to your query:\n\n`;
+
+                for (const related of relatedResults.slice(0, 5)) {
+                  response += `- **${related.entry.title}** (${related.entry.path}) - ${related.entry.summary || "No summary"}\n`;
+                }
+                response += "\n";
+              }
+            } catch (error) {
+              log(`[MemoryAgent] Error getting related files: ${error}`, "error");
+            }
+          }
+
+          // Add instructions
+          response += `To view any of these files, use the readFileTool. Example:\n\n\`\`\`\n{\n  "filePath": "${searchResults[0].entry.path}"\n}\n\`\`\``;
+
+          return response;
         }
-        
-        // Add instructions
-        response += `To view any of these files, use the readFileTool. Example:\n\n\`\`\`\n{\n  "filePath": "${searchResults[0].entry.path}"\n}\n\`\`\``;
-        
-        return response;
+      } catch (indexError) {
+        log(
+          `[MemoryAgent] Index search error, falling back to traditional search: ${indexError}`,
+          "error",
+        );
+        // Record the error in context but continue to fallback
+        this.contextManager.recordError(
+          context.currentStep,
+          `Index search error: ${indexError instanceof Error ? indexError.message : String(indexError)}`,
+          "Falling back to traditional search"
+        );
       }
     } catch (error) {
-      log(`[MemoryAgent] Error using index search, falling back to traditional search: ${error}`, "error");
+      log(
+        `[MemoryAgent] Error using memory system: ${error}`,
+        "error",
+      );
+      return `Error searching memory: ${error instanceof Error ? error.message : String(error)}`;
     }
-    
+
     // Fall back to traditional search if indexing fails or returns no results
     const prompt = `Find information in Clara's memory system related to: "${query}"
     
@@ -449,28 +595,33 @@ Be thorough in your search, checking multiple categories if needed.`;
 
     return await this.execute(prompt);
   }
-  
+
   /**
    * Generate a relationship graph of memory files
    */
-  public async generateRelationshipGraph(projectPath: string = ""): Promise<string> {
+  public async generateRelationshipGraph(
+    projectPath: string = "",
+  ): Promise<string> {
     log(`[MemoryAgent] Generating relationship graph`, "system");
-    
+
     try {
       const indexer = getMemoryIndexer();
       return await indexer.generateRelationshipGraph(projectPath);
     } catch (error) {
-      log(`[MemoryAgent] Error generating relationship graph: ${error}`, "error");
+      log(
+        `[MemoryAgent] Error generating relationship graph: ${error}`,
+        "error",
+      );
       return `Error generating relationship graph: ${error instanceof Error ? error.message : String(error)}`;
     }
   }
-  
+
   /**
    * Rebuild the memory index
    */
   public async rebuildIndex(projectPath: string = ""): Promise<string> {
     log(`[MemoryAgent] Rebuilding memory index`, "system");
-    
+
     try {
       const indexer = getMemoryIndexer();
       return await indexer.reindexAll(projectPath);
@@ -479,7 +630,7 @@ Be thorough in your search, checking multiple categories if needed.`;
       return `Error rebuilding memory index: ${error instanceof Error ? error.message : String(error)}`;
     }
   }
-  
+
   /**
    * Factory function for creating memory agent
    */
