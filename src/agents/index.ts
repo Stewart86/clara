@@ -18,6 +18,9 @@ import { CommandAgent, commandAgent } from "./command.js";
 import { VerificationAgent, verificationAgent } from "./verification.js";
 import { UserIntentAgent, userIntentAgent } from "./userIntent.js";
 
+// Agent Registry
+import { AgentRegistry, getAgent, type AgentType } from "./registry.js";
+
 // Export everything
 export {
   // Legacy exports for backward compatibility
@@ -47,4 +50,9 @@ export {
   verificationAgent,
   UserIntentAgent,
   userIntentAgent,
+  
+  // Agent Registry
+  AgentRegistry,
+  getAgent,
+  AgentType,
 };

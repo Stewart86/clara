@@ -139,8 +139,6 @@ export class OrchestratorAgent extends BaseAgent {
       this.contextManager.setCurrentStep(nextStep.id);
 
       // Execute step with appropriate agent
-      // In a real implementation, this would dispatch to different agent types
-      // For now, we'll use a placeholder
       const stepResult = await this.executeStep(nextStep);
 
       // Mark step as completed
@@ -148,6 +146,9 @@ export class OrchestratorAgent extends BaseAgent {
 
       // Store result
       results.push(`Step ${nextStep.id}: ${stepResult}`);
+
+      // Check for memory updates that should happen after this step
+      await this.checkAndPerformMemoryUpdates(nextStep.id);
 
       // Get next step
       nextStep = this.contextManager.getNextStep();
@@ -160,26 +161,148 @@ export class OrchestratorAgent extends BaseAgent {
   }
 
   /**
+   * Check for memory updates that need to be performed after a specific step
+   */
+  private async checkAndPerformMemoryUpdates(stepId: number): Promise<void> {
+    const context = this.contextManager.getContext();
+    if (!context || !context.plan) return;
+
+    // Find any memory updates that should happen after this step
+    const memoryUpdates = context.plan.memoryUpdatePoints.filter(
+      update => update.afterStep === stepId
+    );
+
+    if (memoryUpdates.length === 0) return;
+
+    log(
+      `[Orchestrator] Found ${memoryUpdates.length} memory updates to perform after step ${stepId}`,
+      "system"
+    );
+
+    // Get memory agent to perform updates
+    const { getAgent } = await import("./registry.js");
+    const memoryAgent = getAgent("memory");
+
+    // Collect all context for memory updates
+    const relevantSteps = context.plan.steps.filter(step => 
+      step.completed && step.result && (
+        step.id === stepId || 
+        context.plan?.steps.find(s => s.id === stepId)?.dependencies.includes(step.id)
+      )
+    );
+
+    const stepResults = relevantSteps.map(step => 
+      `Step ${step.id} (${step.agent}): ${step.description}\nResult: ${step.result || "No result"}`
+    ).join("\n\n");
+
+    // Perform each memory update
+    for (const update of memoryUpdates) {
+      log(
+        `[Orchestrator] Performing memory update: ${update.description} to ${update.filePath}`,
+        "system"
+      );
+
+      try {
+        // Execute memory agent with context from relevant steps
+        await memoryAgent.execute(
+          `Update memory at ${update.filePath}: ${update.description}`,
+          `Context from previous steps:\n\n${stepResults}`
+        );
+
+        log(`[Orchestrator] Memory update completed for ${update.filePath}`, "system");
+      } catch (error) {
+        const errorMessage = error instanceof Error ? error.message : String(error);
+        log(
+          `[Orchestrator] Error performing memory update: ${errorMessage}`,
+          "error"
+        );
+        this.contextManager.recordError(stepId, `Memory update error: ${errorMessage}`);
+      }
+    }
+  }
+
+  /**
    * Execute a single step using the appropriate agent
-   * This is a placeholder - in the full implementation, this would dispatch to appropriate agent types
    */
   private async executeStep(step: {
     id: number;
     description: string;
     agent: string;
   }): Promise<string> {
-    // This is a placeholder method that will be replaced with actual agent dispatching
-    // In the full implementation, this would match the agent type and dispatch accordingly
-
     log(
       `[Orchestrator] Dispatching to ${step.agent} agent: "${step.description}"`,
       "system",
     );
 
-    // Mock execution with a 1-second delay
-    await new Promise((resolve) => setTimeout(resolve, 1000));
+    try {
+      // Get context for dependency results
+      const context = this.contextManager.getContext();
+      if (!context || !context.plan) {
+        throw new Error("No context or plan available");
+      }
 
-    return `Executed "${step.description}" with ${step.agent} agent`;
+      // Build context information from dependencies
+      const dependenciesContext = this.buildDependencyContext(step.id);
+
+      // Get the appropriate agent from registry
+      const { getAgent } = await import("./registry.js");
+      
+      // Validate agent type
+      const validAgentTypes = ["search", "memory", "command", "verification", "userIntent"];
+      if (!validAgentTypes.includes(step.agent)) {
+        throw new Error(`Unknown agent type: ${step.agent}`);
+      }
+      
+      // Execute using the appropriate agent
+      const agent = getAgent(step.agent as any);
+      const result = await agent.execute(step.description, dependenciesContext);
+
+      log(
+        `[Orchestrator] Step ${step.id} completed by ${step.agent} agent`,
+        "system",
+      );
+
+      return result;
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : String(error);
+      log(
+        `[Orchestrator] Error executing step ${step.id}: ${errorMessage}`,
+        "error",
+      );
+      
+      // Record the error in context
+      this.contextManager.recordError(step.id, errorMessage);
+      
+      return `Error executing step ${step.id}: ${errorMessage}`;
+    }
+  }
+
+  /**
+   * Build context information from completed dependency steps
+   */
+  private buildDependencyContext(stepId: number): string {
+    const context = this.contextManager.getContext();
+    if (!context || !context.plan) return "";
+
+    // Find the current step
+    const currentStep = context.plan.steps.find(step => step.id === stepId);
+    if (!currentStep) return "";
+
+    // Get all completed dependencies
+    const dependencies = currentStep.dependencies
+      .map(depId => context.plan?.steps.find(step => step.id === depId))
+      .filter(step => step && step.completed);
+
+    // If no completed dependencies, return empty string
+    if (dependencies.length === 0) return "";
+
+    // Build context string with dependency results
+    const contextParts = dependencies.map(dep => {
+      if (!dep) return "";
+      return `Step ${dep.id} (${dep.agent}): ${dep.description}\nResult: ${dep.result || "No result"}\n\n`;
+    });
+
+    return `Previous steps results:\n\n${contextParts.join("")}`;
   }
 }
 
