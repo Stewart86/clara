@@ -158,8 +158,6 @@ export class BaseAgent {
     userPrompt: string,
     additionalContext?: string,
   ): Promise<string> {
-    log(`[${this.config.name}] Processing: ${userPrompt}`, "system");
-
     // Initialize or retrieve context
     let context = this.contextManager.getContext();
     if (!context) {
@@ -254,7 +252,7 @@ export class BaseAgent {
     try {
       // Handle the stream - since streamText is properly typed by Vercel AI SDK
       // we need to work with it carefully
-      const streamResult = await stream;
+      const streamResult = stream;
       for await (const chunk of streamResult.textStream) {
         fullText += chunk;
         // Could implement UI updates here
@@ -426,11 +424,25 @@ export class BaseAgent {
         openai: {},
       };
     } else {
+      // OpenAI provider options
+      const openaiOptions: Record<string, any> = {
+        enhancedVision: this.config.enhancedVision || false,
+      };
+
+      // Only add reasoningEffort for o-series models (o1, o3-mini)
+      // gpt-4o-mini does not support reasoningEffort
+      if (
+        this.config.reasoningEffort &&
+        (this.config.model === "o1" ||
+          this.config.model === "o3-mini" ||
+          this.config.model.startsWith("o1-") ||
+          this.config.model.startsWith("o3-"))
+      ) {
+        openaiOptions.reasoningEffort = this.config.reasoningEffort;
+      }
+
       return {
-        openai: {
-          reasoningEffort: this.config.reasoningEffort || "medium",
-          enhancedVision: this.config.enhancedVision || false,
-        },
+        openai: openaiOptions,
         // Add empty anthropic to satisfy type requirement
         anthropic: {},
       };

@@ -104,10 +104,10 @@ const MemoryMetadataSchema = z.object({
   created: z.string().describe("Creation timestamp in ISO format"),
   updated: z.string().describe("Last update timestamp in ISO format"),
   tags: z.array(z.string()).describe("Relevant tags for searchability"),
-  related: z.array(z.string()).optional().describe("Related memory file paths"),
-  summary: z.string().optional().describe("Brief summary of the content"),
-  importance: z.enum(["low", "medium", "high"]).optional().describe("Importance level of this information"),
-  source: z.string().optional().describe("Source of the information"),
+  related: z.array(z.string()).describe("Related memory file paths"),
+  summary: z.union([z.string(), z.null()]).describe("Brief summary of the content"),
+  importance: z.union([z.enum(["low", "medium", "high"]), z.null()]).describe("Importance level of this information"),
+  source: z.union([z.string(), z.null()]).describe("Source of the information"),
 });
 
 /**
@@ -127,7 +127,7 @@ const MemoryOrganizationSchema = z.object({
     sourcePaths: z.array(z.string()).describe("Paths of files to consolidate"),
     targetPath: z.string().describe("Path where the consolidated information should be stored"),
     reason: z.string().describe("Reason for consolidation"),
-  })).optional(),
+  })).describe("Consolidation operations for merging related information"),
 });
 
 /**
@@ -140,7 +140,7 @@ export class MemoryAgent extends BaseAgent {
       description: "Lists all memory files available in a specified directory of Clara's memory system",
       parameters: z.object({
         memoryPath: z.string().describe("Simple relative path to memory directory. For example: 'codebase', 'insights', 'technical'"),
-        projectPath: z.string().optional().describe("Optional project path if different from current project"),
+        projectPath: z.string().describe("Project path if different from current project"),
       }),
       execute: async ({ memoryPath, projectPath }) => {
         return await readMemory(memoryPath || "", projectPath || "");
@@ -152,7 +152,7 @@ export class MemoryAgent extends BaseAgent {
       parameters: z.object({
         filePath: z.string().describe("Simple relative path to the memory file. For example: 'codebase/routes.md'"),
         content: z.string().describe("Content to write to the memory file"),
-        projectPath: z.string().optional().describe("Optional project path if different from current project"),
+        projectPath: z.string().describe("Project path if different from current project"),
       }),
       execute: async ({ filePath, content, projectPath }) => {
         return await writeMemory(filePath, content, projectPath || "");
@@ -163,7 +163,7 @@ export class MemoryAgent extends BaseAgent {
       description: "Creates a new directory in Clara's memory system",
       parameters: z.object({
         dirPath: z.string().describe("Simple relative path to the directory to create. For example: 'codebase/routes'"),
-        projectPath: z.string().optional().describe("Optional project path if different from current project"),
+        projectPath: z.string().describe("Project path if different from current project"),
       }),
       execute: async ({ dirPath, projectPath }) => {
         return await createDirectory(dirPath, projectPath || "");
@@ -174,15 +174,18 @@ export class MemoryAgent extends BaseAgent {
       description: "Reads the contents of a specified file",
       parameters: z.object({
         filePath: z.string().describe("Name or path of the file to read (can be partial or full path)"),
-        directory: z.string().optional().describe("Directory to search in, defaults to current directory"),
-        lineRange: z.object({
-          start: z.number().describe("Start line number"),
-          end: z.number().describe("End line number"),
-        }).optional().describe('Optional range of lines to read, e.g. { "start": 10, "end": 20 }'),
-        readEntireFile: z.boolean().optional().describe("Force reading the entire file, even if it's large"),
+        directory: z.string().describe("Directory to search in (defaults to current directory if empty)"),
+        lineRange: z.union([
+          z.object({
+            start: z.number().describe("Start line number"),
+            end: z.number().describe("End line number"),
+          }),
+          z.null()
+        ]).describe('Range of lines to read, e.g. { "start": 10, "end": 20 }'),
+        readEntireFile: z.boolean().describe("Force reading the entire file, even if it's large"),
       }),
       execute: async ({ filePath, directory, lineRange, readEntireFile }) => {
-        return await readFile(filePath, directory || ".", lineRange || null, readEntireFile || false);
+        return await readFile(filePath, directory || ".", lineRange || undefined, readEntireFile || false);
       },
     });
     
@@ -190,7 +193,7 @@ export class MemoryAgent extends BaseAgent {
       description: "Searches Clara's memory system using the enhanced index",
       parameters: z.object({
         query: z.string().describe("Search query to find relevant memory files"),
-        projectPath: z.string().optional().describe("Optional project path if different from current project"),
+        projectPath: z.string().describe("Project path if different from current project"),
       }),
       execute: async ({ query, projectPath }) => {
         const self = new MemoryAgent();
@@ -201,7 +204,7 @@ export class MemoryAgent extends BaseAgent {
     const relationshipGraphTool = aiTool({
       description: "Generates a graph of relationships between memory files",
       parameters: z.object({
-        projectPath: z.string().optional().describe("Optional project path if different from current project"),
+        projectPath: z.string().describe("Project path if different from current project"),
       }),
       execute: async ({ projectPath }) => {
         const self = new MemoryAgent();
@@ -212,7 +215,7 @@ export class MemoryAgent extends BaseAgent {
     const rebuildIndexTool = aiTool({
       description: "Rebuilds the memory index for improved search",
       parameters: z.object({
-        projectPath: z.string().optional().describe("Optional project path if different from current project"),
+        projectPath: z.string().describe("Project path if different from current project"),
       }),
       execute: async ({ projectPath }) => {
         const self = new MemoryAgent();

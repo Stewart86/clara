@@ -12,15 +12,15 @@ import type { CoreMessage } from "ai";
 // Schema for the structured output of the orchestrator
 const PlanSchema = z.object({
   taskCategory: z.string(),
-  severity: z.enum(["critical", "major", "minor"]).optional(),
+  severity: z.enum(["critical", "major", "minor", "none"]),
   steps: z.array(
     z.object({
       id: z.number(),
       description: z.string(),
       agent: z.string(),
       dependencies: z.array(z.number()),
-      completed: z.boolean().transform(() => true), // Force to true to ensure it's always defined
-      result: z.any().optional(),
+      completed: z.boolean(), // Boolean without transform - will default to false in the schema
+      result: z.string().nullable(), // Simplified schema for result
     }),
   ),
   searchKeywords: z.array(z.string()),
@@ -90,6 +90,12 @@ export class OrchestratorAgent extends BaseAgent {
         additionalContext,
       );
 
+      // Ensure all steps are initially marked as not completed, regardless of what came from the model
+      plan.steps.forEach((step) => {
+        step.completed = false;
+        step.result = null;
+      });
+
       // Store plan in context
       this.contextManager.setPlan(plan);
 
@@ -121,15 +127,108 @@ export class OrchestratorAgent extends BaseAgent {
       "system",
     );
 
+    // Debug log the plan details for troubleshooting
+    log(
+      `[Orchestrator Debug] Plan details: ${JSON.stringify(context.plan, null, 2)}`,
+      "system",
+    );
+
+    // Validate the plan has valid agent assignments
+    const invalidAgentSteps = context.plan.steps.filter(
+      (step) =>
+        !["search", "memory", "command", "verification", "userIntent"].includes(
+          step.agent,
+        ),
+    );
+
+    if (invalidAgentSteps.length > 0) {
+      log(
+        `[Orchestrator] Warning: Plan contains ${invalidAgentSteps.length} steps with invalid agent assignments`,
+        "error",
+      );
+
+      // Fix invalid agent assignments with defaults
+      for (const step of invalidAgentSteps) {
+        const originalAgent = step.agent;
+
+        // Assign a default agent based on the description
+        if (
+          step.description.toLowerCase().includes("search") ||
+          step.description.toLowerCase().includes("find")
+        ) {
+          step.agent = "search";
+        } else if (
+          step.description.toLowerCase().includes("memory") ||
+          step.description.toLowerCase().includes("document")
+        ) {
+          step.agent = "memory";
+        } else if (
+          step.description.toLowerCase().includes("run") ||
+          step.description.toLowerCase().includes("execute")
+        ) {
+          step.agent = "command";
+        } else if (
+          step.description.toLowerCase().includes("verify") ||
+          step.description.toLowerCase().includes("validate")
+        ) {
+          step.agent = "verification";
+        } else {
+          // Default to search if we can't determine
+          step.agent = "search";
+        }
+
+        log(
+          `[Orchestrator] Fixed step ${step.id} agent from "${originalAgent}" to "${step.agent}"`,
+          "system",
+        );
+      }
+    }
+
     // Get the first step to execute
     let nextStep = this.contextManager.getNextStep();
     if (!nextStep) {
-      return "Plan has no executable steps.";
+      // Check if there are any steps at all
+      if (context.plan.steps.length === 0) {
+        log(`[Orchestrator] Plan has no steps at all`, "error");
+        return "The plan was created with no steps. I'll need more specific information to help you.";
+      }
+
+      // If there are steps but none are executable, it might be due to circular dependencies
+      log(
+        `[Orchestrator] Plan has ${context.plan.steps.length} steps but none are executable`,
+        "error",
+      );
+
+      // Try to fix by making the first step executable (no dependencies)
+      if (context.plan.steps.length > 0) {
+        const firstStep = context.plan.steps[0];
+        if (firstStep.dependencies.length > 0) {
+          log(
+            `[Orchestrator] Fixing circular dependencies by clearing dependencies for step 1`,
+            "system",
+          );
+          firstStep.dependencies = [];
+
+          // Try again to get the next step
+          nextStep = this.contextManager.getNextStep();
+
+          if (!nextStep) {
+            return "Plan has steps but they have circular dependencies that couldn't be fixed.";
+          }
+        } else {
+          return "Plan has steps but none are executable due to dependency issues.";
+        }
+      } else {
+        return "Plan has no executable steps.";
+      }
     }
 
     // Execute steps until none are available
     const results: string[] = [];
-    while (nextStep) {
+    let executedStepCount = 0;
+    const maxSteps = 20; // Safety limit to prevent infinite loops
+
+    while (nextStep && executedStepCount < maxSteps) {
       log(
         `[Orchestrator] Executing step ${nextStep.id}: ${nextStep.description}`,
         "system",
@@ -145,19 +244,137 @@ export class OrchestratorAgent extends BaseAgent {
       this.contextManager.completeStep(nextStep.id, stepResult);
 
       // Store result
-      results.push(`Step ${nextStep.id}: ${stepResult}`);
+      results.push(
+        `Step ${nextStep.id} (${nextStep.agent}): ${nextStep.description}\n\n${stepResult}`,
+      );
 
       // Check for memory updates that should happen after this step
       await this.checkAndPerformMemoryUpdates(nextStep.id);
 
       // Get next step
       nextStep = this.contextManager.getNextStep();
+      executedStepCount++;
     }
 
-    const summary = `Plan execution completed with ${results.length} steps.\n\n${results.join("\n\n")}`;
-    log(`[Orchestrator] Plan execution completed`, "system");
+    // Check if we hit the safety limit
+    if (executedStepCount >= maxSteps && nextStep) {
+      log(
+        `[Orchestrator] Warning: Hit maximum step limit (${maxSteps})`,
+        "error",
+      );
+      results.push(
+        `Note: Plan execution was limited to ${maxSteps} steps for safety.`,
+      );
+    }
 
-    return summary;
+    // Process results into a concise summary
+    if (results.length === 0) {
+      return "The plan didn't produce any results. Please try with a more specific request.";
+    }
+
+    // Get the verification agent to summarize if available
+    try {
+      const { getAgent } = await import("./registry.js");
+      const verificationAgent = getAgent("verification");
+
+      log(
+        `[Orchestrator] Using verification agent to create concise summary`,
+        "system",
+      );
+      const summarizationPrompt = `
+I need a concise summary of the following multi-step results:
+
+${results.join("\n\n")}
+
+You should be concise, direct, and to the point. 
+Focus only on the most important findings and conclusions. The summary should be informative but brief and use common laguage and layman's term. 
+
+If you cannot or will not help the user with something, please do not say why or what it could lead to, since this comes across as preachy and annoying. Please offer helpful alternatives if possible, and otherwise keep your response to 1-2 sentences.
+IMPORTANT: You should minimize output tokens as much as possible while maintaining helpfulness, quality, and accuracy. Only address the specific query or task at hand, avoiding tangential information unless absolutely critical for completing the request. If you can answer in 1-3 sentences or a short paragraph, please do.
+IMPORTANT: You should NOT answer with unnecessary preamble or postamble (such as explaining your code or summarizing your action), unless the user asks you to.
+IMPORTANT: Keep your responses short, since they will be displayed on a command line interface. You MUST answer concisely with fewer than 4 lines (not including tool use or code generation), unless user asks for detail. Answer the user's question directly, without elaboration, explanation, or details. One word answers are best. Avoid introductions, conclusions, and explanations. You MUST avoid text before/after your response, such as "The answer is <answer>.", "Here is the content of the file..." or "Based on the information provided, the answer is..." or "Here is what I will do next...". Here are some examples to demonstrate appropriate verbosity:
+<example>
+user: 2 + 2
+assistant: 4
+</example>
+
+<example>
+user: what is 2+2?
+assistant: 4
+</example>
+
+<example>
+user: is 11 a prime number?
+assistant: true
+</example>
+
+<example>
+user: what command should I run to list files in the current directory?
+assistant: ls
+</example>
+
+<example>
+user: what command should I run to watch files in the current directory?
+assistant: [use the ls tool to list the files in the current directory, then read docs/commands in the relevant file to find out how to watch files]
+npm run dev
+</example>
+
+<example>
+user: How many golf balls fit inside a jetta?
+assistant: 150000
+</example>
+
+<example>
+user: what files are in the directory src/?
+assistant: [runs ls and sees foo.c, bar.c, baz.c]
+user: which file contains the implementation of foo?
+assistant: src/foo.c
+</example>
+
+<example>
+user: write tests for new feature
+assistant: [uses grep and glob search tools to find where similar tests are defined, uses concurrent read file tool use blocks in one tool call to read relevant files at the same time, uses edit file tool to write new tests]
+</example>
+`;
+
+      const summary = await verificationAgent.execute(summarizationPrompt);
+      log(
+        `[Orchestrator] Plan execution completed with ${results.length} steps - summarized`,
+        "system",
+      );
+      return summary;
+    } catch (error) {
+      // If summarization fails, create a basic summary
+      log(
+        `[Orchestrator] Failed to summarize results: ${error}. Using basic summary.`,
+        "error",
+      );
+
+      // Create a basic summary using just the first and last result
+      let basicSummary = "Here's what I found:\n\n";
+
+      // Add most relevant info (first and last step results)
+      if (results.length === 1) {
+        basicSummary += results[0];
+      } else {
+        // Add first and last steps which usually contain the most important info
+        const firstResult = results[0].split("\n\n")[1] || results[0]; // Skip the step description part if possible
+        const lastResult =
+          results[results.length - 1].split("\n\n")[1] ||
+          results[results.length - 1];
+
+        basicSummary += firstResult + "\n\n";
+        if (results.length > 1) {
+          basicSummary += lastResult;
+        }
+      }
+
+      log(
+        `[Orchestrator] Plan execution completed with ${results.length} steps - basic summary`,
+        "system",
+      );
+      return basicSummary;
+    }
   }
 
   /**
@@ -169,14 +386,14 @@ export class OrchestratorAgent extends BaseAgent {
 
     // Find any memory updates that should happen after this step
     const memoryUpdates = context.plan.memoryUpdatePoints.filter(
-      update => update.afterStep === stepId
+      (update) => update.afterStep === stepId,
     );
 
     if (memoryUpdates.length === 0) return;
 
     log(
       `[Orchestrator] Found ${memoryUpdates.length} memory updates to perform after step ${stepId}`,
-      "system"
+      "system",
     );
 
     // Get memory agent to perform updates
@@ -184,39 +401,52 @@ export class OrchestratorAgent extends BaseAgent {
     const memoryAgent = getAgent("memory");
 
     // Collect all context for memory updates
-    const relevantSteps = context.plan.steps.filter(step => 
-      step.completed && step.result && (
-        step.id === stepId || 
-        context.plan?.steps.find(s => s.id === stepId)?.dependencies.includes(step.id)
-      )
+    const relevantSteps = context.plan.steps.filter(
+      (step) =>
+        step.completed &&
+        step.result &&
+        (step.id === stepId ||
+          context.plan?.steps
+            .find((s) => s.id === stepId)
+            ?.dependencies.includes(step.id)),
     );
 
-    const stepResults = relevantSteps.map(step => 
-      `Step ${step.id} (${step.agent}): ${step.description}\nResult: ${step.result || "No result"}`
-    ).join("\n\n");
+    const stepResults = relevantSteps
+      .map(
+        (step) =>
+          `Step ${step.id} (${step.agent}): ${step.description}\nResult: ${step.result || "No result"}`,
+      )
+      .join("\n\n");
 
     // Perform each memory update
     for (const update of memoryUpdates) {
       log(
         `[Orchestrator] Performing memory update: ${update.description} to ${update.filePath}`,
-        "system"
+        "system",
       );
 
       try {
         // Execute memory agent with context from relevant steps
         await memoryAgent.execute(
           `Update memory at ${update.filePath}: ${update.description}`,
-          `Context from previous steps:\n\n${stepResults}`
+          `Context from previous steps:\n\n${stepResults}`,
         );
 
-        log(`[Orchestrator] Memory update completed for ${update.filePath}`, "system");
+        log(
+          `[Orchestrator] Memory update completed for ${update.filePath}`,
+          "system",
+        );
       } catch (error) {
-        const errorMessage = error instanceof Error ? error.message : String(error);
+        const errorMessage =
+          error instanceof Error ? error.message : String(error);
         log(
           `[Orchestrator] Error performing memory update: ${errorMessage}`,
-          "error"
+          "error",
         );
-        this.contextManager.recordError(stepId, `Memory update error: ${errorMessage}`);
+        this.contextManager.recordError(
+          stepId,
+          `Memory update error: ${errorMessage}`,
+        );
       }
     }
   }
@@ -234,6 +464,26 @@ export class OrchestratorAgent extends BaseAgent {
       "system",
     );
 
+    // Get the display activity function if available
+    let displayActivity:
+      | ((agentName: string, action: string) => void)
+      | undefined;
+    try {
+      const sessionState = await import("../utils/sessionState.js").then(
+        (module) => module.getSessionState(),
+      );
+      displayActivity = sessionState.get("displayAgentActivity");
+    } catch (error) {
+      // No display function available, that's fine
+    }
+
+    if (displayActivity) {
+      displayActivity(
+        step.agent,
+        `step ${step.id}: ${step.description.substring(0, 40)}...`,
+      );
+    }
+
     try {
       // Get context for dependency results
       const context = this.contextManager.getContext();
@@ -246,13 +496,19 @@ export class OrchestratorAgent extends BaseAgent {
 
       // Get the appropriate agent from registry
       const { getAgent } = await import("./registry.js");
-      
+
       // Validate agent type
-      const validAgentTypes = ["search", "memory", "command", "verification", "userIntent"];
+      const validAgentTypes = [
+        "search",
+        "memory",
+        "command",
+        "verification",
+        "userIntent",
+      ];
       if (!validAgentTypes.includes(step.agent)) {
         throw new Error(`Unknown agent type: ${step.agent}`);
       }
-      
+
       // Execute using the appropriate agent
       const agent = getAgent(step.agent as any);
       const result = await agent.execute(step.description, dependenciesContext);
@@ -264,15 +520,16 @@ export class OrchestratorAgent extends BaseAgent {
 
       return result;
     } catch (error) {
-      const errorMessage = error instanceof Error ? error.message : String(error);
+      const errorMessage =
+        error instanceof Error ? error.message : String(error);
       log(
         `[Orchestrator] Error executing step ${step.id}: ${errorMessage}`,
         "error",
       );
-      
+
       // Record the error in context
       this.contextManager.recordError(step.id, errorMessage);
-      
+
       return `Error executing step ${step.id}: ${errorMessage}`;
     }
   }
@@ -285,19 +542,19 @@ export class OrchestratorAgent extends BaseAgent {
     if (!context || !context.plan) return "";
 
     // Find the current step
-    const currentStep = context.plan.steps.find(step => step.id === stepId);
+    const currentStep = context.plan.steps.find((step) => step.id === stepId);
     if (!currentStep) return "";
 
     // Get all completed dependencies
     const dependencies = currentStep.dependencies
-      .map(depId => context.plan?.steps.find(step => step.id === depId))
-      .filter(step => step && step.completed);
+      .map((depId) => context.plan?.steps.find((step) => step.id === depId))
+      .filter((step) => step && step.completed);
 
     // If no completed dependencies, return empty string
     if (dependencies.length === 0) return "";
 
     // Build context string with dependency results
-    const contextParts = dependencies.map(dep => {
+    const contextParts = dependencies.map((dep) => {
       if (!dep) return "";
       return `Step ${dep.id} (${dep.agent}): ${dep.description}\nResult: ${dep.result || "No result"}\n\n`;
     });

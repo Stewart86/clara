@@ -83,9 +83,9 @@ const VerificationResultSchema = z.object({
     issue: z.string().describe("Description of what's incorrect"),
     correction: z.string().describe("Suggested correction"),
     evidence: z.string().describe("Evidence supporting the correction")
-  })).optional(),
-  suggestions: z.array(z.string()).optional().describe("Additional suggestions for improving accuracy or quality"),
-  limitations: z.array(z.string()).optional().describe("Limitations or constraints of this verification")
+  })).describe("Any inaccuracies found during verification"),
+  suggestions: z.array(z.string()).describe("Additional suggestions for improving accuracy or quality"),
+  limitations: z.array(z.string()).describe("Limitations or constraints of this verification")
 });
 
 /**
@@ -98,15 +98,18 @@ export class VerificationAgent extends BaseAgent {
       description: "Reads the contents of a specified file",
       parameters: z.object({
         filePath: z.string().describe("Name or path of the file to read"),
-        directory: z.string().optional().describe("Directory to search in, defaults to current directory"),
-        lineRange: z.object({
-          start: z.number().describe("Start line number"),
-          end: z.number().describe("End line number"),
-        }).optional().describe('Optional range of lines to read'),
-        readEntireFile: z.boolean().optional().describe("Force reading the entire file, even if it's large"),
+        directory: z.string().describe("Directory to search in (defaults to current directory if empty)"),
+        lineRange: z.union([
+          z.object({
+            start: z.number().describe("Start line number"),
+            end: z.number().describe("End line number"),
+          }),
+          z.null()
+        ]).describe('Range of lines to read'),
+        readEntireFile: z.boolean().describe("Force reading the entire file, even if it's large"),
       }),
       execute: async ({ filePath, directory, lineRange, readEntireFile }) => {
-        return await readFile(filePath, directory || ".", lineRange || null, readEntireFile || false);
+        return await readFile(filePath, directory || ".", lineRange || undefined, readEntireFile || false);
       },
     });
 
@@ -114,7 +117,7 @@ export class VerificationAgent extends BaseAgent {
       description: "Lists all memory files available in a specified directory of Clara's memory system",
       parameters: z.object({
         memoryPath: z.string().describe("Simple relative path to memory directory. For example: 'codebase', 'insights', 'technical'"),
-        projectPath: z.string().optional().describe("Optional project path if different from current project"),
+        projectPath: z.string().describe("Project path if different from current project"),
       }),
       execute: async ({ memoryPath, projectPath }) => {
         return await readMemory(memoryPath || "", projectPath || "");

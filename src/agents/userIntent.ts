@@ -64,15 +64,15 @@ const UserIntentSchema = z.object({
   implicitNeeds: z.array(z.string()).describe("Underlying needs implied but not directly stated"),
   queryClassification: z.object({
     primaryCategory: z.string().describe("Main category of the query"),
-    secondaryCategories: z.array(z.string()).optional().describe("Additional relevant categories"),
+    secondaryCategories: z.array(z.string()).describe("Additional relevant categories"),
     confidence: z.number().min(0).max(100).describe("Confidence in the classification (0-100)")
   }),
-  contextualFactors: z.array(z.string()).optional().describe("Relevant contextual information that affects interpretation"),
+  contextualFactors: z.array(z.string()).describe("Relevant contextual information that affects interpretation"),
   keyParameters: z.array(z.object({
     name: z.string().describe("Parameter name"),
     value: z.string().describe("Parameter value or description"),
     importance: z.enum(["critical", "high", "medium", "low"]).describe("How important this parameter is")
-  })).optional(),
+  })).describe("Parameters extracted from the query"),
   reformulatedQuery: z.string().describe("The query reformulated for clarity and precision"),
   suggestedApproach: z.object({
     strategy: z.string().describe("How to approach answering this query"),

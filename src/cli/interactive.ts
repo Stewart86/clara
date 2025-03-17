@@ -5,17 +5,13 @@ import fs from "fs/promises";
 import {
   type CoreMessage,
   experimental_createMCPClient as createMCPClient,
-  generateText,
-  type ToolSet,
 } from "ai";
-import { systemPrompt } from "../prompts/system-prompt.js";
-import { getTools, setProjectIdentifier } from "../tools/index.js";
-import { openai } from "@ai-sdk/openai";
-import { getProjectContext, getMemoryFilesContext } from "../utils/codebase.js";
+import { setProjectIdentifier } from "../tools/index.js";
 import { log, markdownToTerminal, TokenTracker } from "../utils/index.js";
 import { getSettings, type Settings } from "../utils/settings.js";
 import boxen, { type Options } from "boxen";
-import { plannerAgent } from "../agents/planner.js";
+import { AgentRegistry, getAgent } from "../agents/registry.js";
+import { createOrchestratorAgent } from "../agents/orchestrator.js";
 
 /**
  * Display token usage summary from TokenTracker
@@ -193,6 +189,23 @@ function displayAssistantMessage(text: string, terminalWidth: number) {
 }
 
 /**
+ * Function to display agent status during execution
+ */
+function displayAgentActivity(agentName: string, action: string) {
+  const agentColor =
+    {
+      orchestrator: chalk.blue,
+      search: chalk.yellow,
+      memory: chalk.green,
+      command: chalk.red,
+      verification: chalk.magenta,
+      userIntent: chalk.cyan,
+    }[agentName] || chalk.white;
+
+  process.stdout.write(`\r${agentColor(`${agentName}:`)} ${action}...`);
+}
+
+/**
  * Function to display goodbye message
  */
 function displayGoodbyeMessage(terminalWidth: number) {
@@ -218,10 +231,32 @@ async function setupMCPTools(settings: Settings) {
   const mcpClients = [];
   const mcpTools = [];
 
+  // Ensure features object is always defined
+  const features = settings.features || {
+    multiAgentSystem: false,
+    memoryIndexing: false, 
+    agentActivity: true,
+    contextSharing: true
+  };
+
   for (const [key, transport] of Object.entries(settings.mcpServers)) {
     log(`Creating MCP client for ${key}`);
     try {
-      const mcpClient = await createMCPClient({ transport });
+      // Only pass the transport parameter to createMCPClient
+      const mcpClient = await createMCPClient({ 
+        transport
+      });
+      
+      // Store features in session state instead
+      const sessionState = await import("../utils/sessionState.js").then(
+        (module) => module.getSessionState()
+      );
+      sessionState.set("features", {
+        multiAgentSystem: features.multiAgentSystem ?? false,
+        memoryIndexing: features.memoryIndexing ?? false,
+        agentActivity: features.agentActivity ?? true,
+        contextSharing: features.contextSharing ?? true
+      });
       mcpClients.push(mcpClient);
 
       const tool = await mcpClient.tools();
@@ -234,6 +269,27 @@ async function setupMCPTools(settings: Settings) {
 
   log(`${mcpTools.length} MCP tools created`, "success");
   return [mcpClients, mcpTools];
+}
+
+/**
+ * Initialize the agent registry and create necessary agents
+ */
+function initializeAgentRegistry() {
+  const registry = AgentRegistry.getInstance();
+  log(`[Interactive] Initializing agent registry`, "system");
+
+  // Force initialization of all agents
+  getAgent("search");
+  getAgent("memory");
+  getAgent("command");
+  getAgent("verification");
+  getAgent("userIntent");
+
+  log(
+    `[Interactive] Agent registry initialized with ${registry.getRegisteredAgentCount()} agents`,
+    "system",
+  );
+  return registry;
 }
 
 /**
@@ -263,6 +319,131 @@ function trackTokenUsage(response: any, messages: CoreMessage[], text: string) {
       completionTokenEstimate,
       model,
     );
+  }
+}
+
+/**
+ * Execute the request using the multi-agent system
+ */
+async function executeWithMultiAgentSystem(
+  prompt: string,
+  additionalContext: string = "",
+): Promise<string> {
+  log(`[Interactive] Processing request: ${prompt}`, "system");
+  process.stdout.write("analyzing request...");
+
+  // Create orchestrator agent
+  const orchestrator = createOrchestratorAgent();
+
+  try {
+    // Fall back to direct search if anything goes wrong
+    try {
+      // Create a plan
+      displayAgentActivity("orchestrator", "creating plan");
+      const plan = await orchestrator.createPlan(prompt, additionalContext);
+
+      // Validate the plan has steps
+      if (!plan || !plan.steps || plan.steps.length === 0) {
+        throw new Error("Plan was created but contains no steps");
+      }
+
+      log(
+        `[Interactive] Plan created with ${plan.steps.length} steps`,
+        "system",
+      );
+
+      // Debug log the plan details
+      log(
+        `[Interactive Debug] Plan details: ${JSON.stringify(plan, null, 2)}`,
+        "system",
+      );
+
+      // For debugging, check if steps have proper agent assignments
+      const invalidAgentSteps = plan.steps.filter(
+        (step) =>
+          ![
+            "search",
+            "memory",
+            "command",
+            "verification",
+            "userIntent",
+          ].includes(step.agent),
+      );
+      if (invalidAgentSteps.length > 0) {
+        log(
+          `[Interactive] Warning: Plan contains ${invalidAgentSteps.length} steps with invalid agent assignments`,
+          "error",
+        );
+        invalidAgentSteps.forEach((step) => {
+          log(
+            `[Interactive] Step ${step.id} has invalid agent: "${step.agent}"`,
+            "error",
+          );
+        });
+      }
+
+      process.stdout.write("\rexecuting plan...                     ");
+
+      // Execute plan and get results
+      displayAgentActivity("orchestrator", "executing plan");
+      const result = await orchestrator.executePlan();
+
+      // If the result contains any of these error messages, provide a better response
+      const errorMessages = [
+        "Plan has no executable steps",
+        "Plan has steps but none are executable",
+        "Plan has steps but they have circular dependencies",
+        "The plan was created with no steps",
+      ];
+
+      if (errorMessages.some((err) => result.includes(err))) {
+        throw new Error(`Plan execution failed: ${result}`);
+      }
+
+      // Clear the progress indicator
+      process.stdout.write("\r" + " ".repeat(100) + "\r");
+
+      // Return successful result
+      return result;
+    } catch (orchestratorError) {
+      // If anything fails with the orchestrator, fall back to direct search
+      log(
+        `[Interactive] Orchestrator failed: ${orchestratorError}. Falling back to search agent.`,
+        "error",
+      );
+
+      // Clear the progress indicator
+      process.stdout.write("\r" + " ".repeat(100) + "\r");
+
+      // Get the search agent directly
+      const { getAgent } = await import("../agents/registry.js");
+      const searchAgent = getAgent("search");
+
+      // Execute search to find information related to the request
+      displayAgentActivity("search", "examining file contents");
+
+      // Create a more specific search prompt to ensure useful concise results
+      const enhancedPrompt = `
+I need to investigate: ${prompt}
+
+Please provide a concise, focused answer (maximum 3 paragraphs) with exactly what I need to know.
+Focus on giving me useful information directly rather than just listing files. Examine relevant code
+if needed and explain what you find.
+`;
+
+      const searchResult = await searchAgent.execute(enhancedPrompt);
+
+      return searchResult;
+    }
+  } catch (error) {
+    // This is the absolute last resort if even the fallback fails
+    log(`[Interactive] All approaches failed: ${error}`, "error");
+
+    // Clear the progress indicator
+    process.stdout.write("\r" + " ".repeat(100) + "\r");
+
+    // Provide a more helpful error message to the user
+    return `I encountered an error while processing your request: ${error instanceof Error ? error.message : String(error)}.\n\nPlease try rephrasing your request or providing more specific details about what you'd like me to help with.`;
   }
 }
 
@@ -307,13 +488,16 @@ export async function interactive(projectPath: string = process.cwd()) {
     const [newMcpClients, mcpTools] = await setupMCPTools(settings);
     mcpClients = newMcpClients;
 
-    const messages: CoreMessage[] = [
-      { role: "system", content: systemPrompt },
-      await getProjectContext(),
-      await getMemoryFilesContext(),
-    ];
+    // Share the display agent activity function via session state
+    const sessionState = await import("../utils/sessionState.js").then(
+      (module) => module.getSessionState(),
+    );
+    sessionState.set("displayAgentActivity", displayAgentActivity);
 
-    const tools = getTools();
+    // Initialize agent registry with all worker agents
+    initializeAgentRegistry();
+    log(`[Interactive] Using multi-agent workflow system`, "system");
+
     let running = true;
 
     while (running) {
@@ -332,88 +516,12 @@ export async function interactive(projectPath: string = process.cwd()) {
           break;
         }
 
-        // Add user message to conversation history
-        messages.push({ role: "user", content: prompt });
-
-        process.stdout.write("thinking...");
-
-        // First, run the planner agent to analyze the request
-        const plannerOutput = await plannerAgent(prompt, "");
-        log(
-          `[Interactive] Planner output generated (${plannerOutput.length} chars)`,
-          "system",
-        );
-
-        // Extract memory update points from planner output if they exist
-        const memoryUpdateRegex =
-          /Memory Update Points:\s*\n((?:- After .*\n)*)/;
-        const memoryUpdateMatch = plannerOutput.match(memoryUpdateRegex);
-
-        // Track memory update instructions to handle after the response
-        let memoryUpdateInstructions: string[] = [];
-        if (memoryUpdateMatch && memoryUpdateMatch[1]) {
-          const updatePointsText = memoryUpdateMatch[1];
-          const updatePoints = updatePointsText
-            .split("\n")
-            .filter((line) => line.trim().length > 0);
-
-          log(
-            `[Interactive] Found ${updatePoints.length} memory update points`,
-            "system",
-          );
-          memoryUpdateInstructions = updatePoints.map((point) => point.trim());
-        }
-
-        // Store memory update instructions in session state for later use
-        sessionState.set("pendingMemoryUpdates", memoryUpdateInstructions);
-
-        // Create a combined prompt with planner insights
-        const enhancedPrompt = `
-USER ORIGINAL REQUEST: ${prompt}
-
-PLANNER ANALYSIS:
-${plannerOutput}
-
-Please use the planner's analysis above to guide your approach. Follow the search keywords and step-by-step directions while addressing the user's request. If memory updates are needed based on what you learn, make sure to use the writeMemoryTool to store this information.
-`;
-
-        // Add the planner's analysis as a hidden system message
-        messages.push({ role: "system", content: enhancedPrompt });
-
-        // Process the prompt and get response
-        const response = await generateText({
-          model: openai.responses("gpt-4o"),
-          messages,
-          providerOptions: {
-            openai: { reasoningEffort: "medium" },
-          },
-          tools: {
-            ...tools,
-            ...(Object.fromEntries(
-              mcpTools.flatMap((toolSet) => Object.entries(toolSet)),
-            ) as ToolSet),
-          },
-          maxSteps: 100,
-        });
-
-        const { text } = response;
-        trackTokenUsage(response, messages, text);
-
-        // Clear thinking indicator
-        process.stdout.moveCursor(0, -1);
-        process.stdout.clearLine(1);
+        // Process with the multi-agent system
+        const text = await executeWithMultiAgentSystem(prompt);
 
         // Display formatted response
         const formattedText = markdownToTerminal(text);
         displayAssistantMessage(formattedText, terminalWidth);
-
-        // Add assistant message to conversation history
-        messages.push({ role: "assistant", content: text });
-
-        // Remove the planner analysis system message to keep history clean
-        messages.pop(); // Remove assistant message temporarily
-        messages.pop(); // Remove planner system message
-        messages.push({ role: "assistant", content: text }); // Re-add assistant message
       } catch (error) {
         const inputError = error as unknown as {
           code: string;

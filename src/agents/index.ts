@@ -54,5 +54,5 @@ export {
   // Agent Registry
   AgentRegistry,
   getAgent,
-  AgentType,
+  type AgentType,
 };

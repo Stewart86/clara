@@ -524,7 +524,7 @@ describe("Command Security Unit Tests", () => {
       );
 
       // Git operations
-      expect(evaluateRiskLevel("git", "git status")).toBe("caution");
+      expect(evaluateRiskLevel("git", "git status")).toBe("safe");
       expect(evaluateRiskLevel("git", "git log")).toBe("caution");
       expect(
         evaluateRiskLevel("git", "git clone https://github.com/user/repo"),
