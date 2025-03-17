@@ -197,6 +197,13 @@ export function createSearchAgent(): SearchAgent {
 }
 
 /**
+ * Static factory method for creating search agent
+ */
+SearchAgent.create = function(): SearchAgent {
+  return new SearchAgent();
+};
+
+/**
  * Legacy function for backward compatibility
  */
 export async function searchAgent(prompt: string): Promise<string> {
