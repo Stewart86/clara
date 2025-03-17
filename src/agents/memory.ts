@@ -5,6 +5,8 @@ import { BaseAgent, type AgentConfig } from "./base.js";
 import { writeMemory, createDirectory } from "../tools/memoryWriter.js";
 import { readMemory } from "../tools/memoryReader.js";
 import { readFile } from "../tools/fileReader.js";
+import { getMemoryIndexer } from "../tools/memoryIndex.js";
+import { resolveMemoryPaths } from "../tools/memoryUtils.js";
 import path from "path";
 
 const getMemoryAgentSystemPrompt = (): string => `You are a specialized Memory Management Agent for Clara, responsible for organizing and managing Clara's knowledge base in an optimized way.
@@ -15,6 +17,8 @@ Your primary responsibilities are:
 3. Adding metadata to memory files for improved searchability
 4. Consolidating related information to avoid fragmentation
 5. Managing cross-references between related memory files
+6. Utilizing the memory index system for efficient search and retrieval
+7. Maintaining relationship networks between related memory files
 
 ## Memory Structure
 
@@ -40,6 +44,8 @@ created: 2023-04-20T14:53:00Z
 updated: 2023-05-15T09:30:00Z
 tags: [auth, security, jwt, oauth]
 related: [technical/jwt.md, technical/oauth.md]
+summary: Overview of the authentication process using JWT tokens and OAuth 2.0
+importance: high
 ---
 
 # Authentication Flow
@@ -51,12 +57,28 @@ The authentication system uses JWT tokens with OAuth 2.0...
 
 When organizing memory, you should:
 - Create appropriate directory structures
-- Add detailed YAML frontmatter with tags and related files
+- Add detailed YAML frontmatter with tags, summary, and related files
+- Use the importance field (low, medium, high) to indicate priority
 - Consolidate similar information
 - Split large topics into focused sub-topics
 - Create index files for complex topics
 - Add cross-references between related topics
 - Use consistent naming conventions
+- Maintain the memory index for efficient search
+
+## Memory Index System
+
+Clara uses an advanced memory indexing system that:
+1. Automatically extracts keywords from memory file content
+2. Tracks relationships between memory files
+3. Records access patterns and usage statistics 
+4. Provides relevance-based search results
+5. Enables finding related information across the memory system
+
+You can use these special indexing tools:
+- searchMemoryTool: Search the memory index with natural language queries
+- relationshipGraphTool: Generate a visual graph of memory relationships
+- rebuildIndexTool: Rebuild the memory index if needed
 
 ## Important Guidelines
 
@@ -64,11 +86,14 @@ When organizing memory, you should:
 2. Use descriptive, consistent file naming: lowercase with hyphens (e.g., "authentication-flow.md")
 3. Include relevant tags in the frontmatter for improved searchability
 4. Add "related" links to connect associated information
-5. Keep files focused on a single topic - split if they become too broad
-6. Maintain backward compatibility with existing memory structures
-7. Use proper Markdown formatting for content structure
-8. Include creation and update timestamps in the frontmatter
-9. Always save memory files with the .md extension
+5. Include a clear summary in the frontmatter (1-2 sentences)
+6. Set an appropriate importance level in the frontmatter
+7. Keep files focused on a single topic - split if they become too broad
+8. Maintain backward compatibility with existing memory structures
+9. Use proper Markdown formatting for content structure
+10. Include creation and update timestamps in the frontmatter
+11. Always save memory files with the .md extension
+12. Create bidirectional relationships between related files
 `;
 
 /**
@@ -160,6 +185,40 @@ export class MemoryAgent extends BaseAgent {
         return await readFile(filePath, directory || ".", lineRange || null, readEntireFile || false);
       },
     });
+    
+    const searchMemoryTool = aiTool({
+      description: "Searches Clara's memory system using the enhanced index",
+      parameters: z.object({
+        query: z.string().describe("Search query to find relevant memory files"),
+        projectPath: z.string().optional().describe("Optional project path if different from current project"),
+      }),
+      execute: async ({ query, projectPath }) => {
+        const self = new MemoryAgent();
+        return await self.findRelatedMemory(query, projectPath || "");
+      },
+    });
+    
+    const relationshipGraphTool = aiTool({
+      description: "Generates a graph of relationships between memory files",
+      parameters: z.object({
+        projectPath: z.string().optional().describe("Optional project path if different from current project"),
+      }),
+      execute: async ({ projectPath }) => {
+        const self = new MemoryAgent();
+        return await self.generateRelationshipGraph(projectPath || "");
+      },
+    });
+    
+    const rebuildIndexTool = aiTool({
+      description: "Rebuilds the memory index for improved search",
+      parameters: z.object({
+        projectPath: z.string().optional().describe("Optional project path if different from current project"),
+      }),
+      execute: async ({ projectPath }) => {
+        const self = new MemoryAgent();
+        return await self.rebuildIndex(projectPath || "");
+      },
+    });
 
     const config: AgentConfig = {
       name: 'memory',
@@ -172,6 +231,9 @@ export class MemoryAgent extends BaseAgent {
         writeMemoryTool,
         createDirectoryTool,
         readFileTool,
+        searchMemoryTool,
+        relationshipGraphTool,
+        rebuildIndexTool,
       },
       maxSteps: 20,
       reasoningEffort: 'medium',
@@ -296,9 +358,81 @@ Return a detailed plan of your organization strategy in JSON format according to
   /**
    * Search for specific information across the memory system
    */
-  public async findRelatedMemory(query: string): Promise<string> {
+  public async findRelatedMemory(query: string, projectPath: string = ""): Promise<string> {
     log(`[MemoryAgent] Searching for related memory: ${query}`, "system");
     
+    try {
+      // First try to use the memory indexer
+      const indexer = getMemoryIndexer();
+      const searchResults = await indexer.search(query, projectPath);
+      
+      if (searchResults.length > 0) {
+        // Format the results
+        let response = `# Memory Search Results for "${query}"\n\n`;
+        
+        // Group by relevance
+        const highRelevance = searchResults.filter(r => r.score >= 10);
+        const mediumRelevance = searchResults.filter(r => r.score >= 5 && r.score < 10);
+        const lowRelevance = searchResults.filter(r => r.score > 0 && r.score < 5);
+        
+        // Display high relevance results
+        if (highRelevance.length > 0) {
+          response += `## Highly Relevant Results\n\n`;
+          for (const result of highRelevance) {
+            response += `### ${result.entry.title}\n`;
+            response += `- **Path:** ${result.entry.path}\n`;
+            if (result.entry.summary) {
+              response += `- **Summary:** ${result.entry.summary}\n`;
+            }
+            response += `- **Tags:** ${result.entry.tags.join(', ')}\n`;
+            response += `- **Created:** ${new Date(result.entry.created).toLocaleDateString()}\n`;
+            response += `- **Updated:** ${new Date(result.entry.updated).toLocaleDateString()}\n\n`;
+          }
+        }
+        
+        // Display medium relevance results
+        if (mediumRelevance.length > 0) {
+          response += `## Related Results\n\n`;
+          for (const result of mediumRelevance) {
+            response += `- **${result.entry.title}** (${result.entry.path}) - ${result.entry.summary || 'No summary'}\n`;
+          }
+          response += '\n';
+        }
+        
+        // Mention low relevance results
+        if (lowRelevance.length > 0) {
+          response += `## Additional Results\n\n`;
+          response += `- ${lowRelevance.map(r => r.entry.path).join('\n- ')}\n\n`;
+        }
+        
+        // Show related files
+        if (highRelevance.length > 0) {
+          try {
+            const relatedResults = await indexer.getRelated(highRelevance[0].entry.path, projectPath);
+            
+            if (relatedResults.length > 0) {
+              response += `## Related Information\n\nThese files might also be relevant to your query:\n\n`;
+              
+              for (const related of relatedResults.slice(0, 5)) {
+                response += `- **${related.entry.title}** (${related.entry.path}) - ${related.entry.summary || 'No summary'}\n`;
+              }
+              response += '\n';
+            }
+          } catch (error) {
+            log(`[MemoryAgent] Error getting related files: ${error}`, "error");
+          }
+        }
+        
+        // Add instructions
+        response += `To view any of these files, use the readFileTool. Example:\n\n\`\`\`\n{\n  "filePath": "${searchResults[0].entry.path}"\n}\n\`\`\``;
+        
+        return response;
+      }
+    } catch (error) {
+      log(`[MemoryAgent] Error using index search, falling back to traditional search: ${error}`, "error");
+    }
+    
+    // Fall back to traditional search if indexing fails or returns no results
     const prompt = `Find information in Clara's memory system related to: "${query}"
     
 Please:
@@ -311,6 +445,36 @@ Please:
 Be thorough in your search, checking multiple categories if needed.`;
 
     return await this.execute(prompt);
+  }
+  
+  /**
+   * Generate a relationship graph of memory files
+   */
+  public async generateRelationshipGraph(projectPath: string = ""): Promise<string> {
+    log(`[MemoryAgent] Generating relationship graph`, "system");
+    
+    try {
+      const indexer = getMemoryIndexer();
+      return await indexer.generateRelationshipGraph(projectPath);
+    } catch (error) {
+      log(`[MemoryAgent] Error generating relationship graph: ${error}`, "error");
+      return `Error generating relationship graph: ${error instanceof Error ? error.message : String(error)}`;
+    }
+  }
+  
+  /**
+   * Rebuild the memory index
+   */
+  public async rebuildIndex(projectPath: string = ""): Promise<string> {
+    log(`[MemoryAgent] Rebuilding memory index`, "system");
+    
+    try {
+      const indexer = getMemoryIndexer();
+      return await indexer.reindexAll(projectPath);
+    } catch (error) {
+      log(`[MemoryAgent] Error rebuilding index: ${error}`, "error");
+      return `Error rebuilding memory index: ${error instanceof Error ? error.message : String(error)}`;
+    }
   }
   
   /**
