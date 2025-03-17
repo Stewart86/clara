@@ -14,7 +14,7 @@ async function testWebSearch() {
     
     // Log the result
     log("Web search result:", "system");
-    log(result, "data");
+    log(result, "system");
     
     log("Web search test completed successfully", "success");
     return true;

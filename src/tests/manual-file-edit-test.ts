@@ -65,7 +65,7 @@ const newFunction = () => {
 
 module.exports = { newFunction };`;
     
-    const replaceResult = await replaceFile(tempFilePath, newContent);
+    const replaceResult = await replaceFile(tempFilePath, newContent, "Testing file replacement");
     
     console.log(`\nReplace result: ${replaceResult}\n`);
     
