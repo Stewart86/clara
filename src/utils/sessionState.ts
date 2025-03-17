@@ -3,7 +3,7 @@
  * Persists data across multiple command invocations within a single CLI session
  */
 import { Interface as ReadlineInterface } from "node:readline";
-import { FileEditApprovalState } from "../tools/fileWriter.js";
+import type { FileEditApprovalState } from "../tools/fileWriter.js";
 
 // Command approval state
 export interface CommandApprovalState {

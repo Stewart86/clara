@@ -8,6 +8,7 @@ import {
   createMemoryPath,
   ensureMemoryDirectoryExists,
 } from "./memoryUtils.js";
+import { getMemoryIndexer } from "./memoryIndex.js";
 
 async function getAllFilesRecursively(dirPath: string): Promise<string[]> {
   const files: string[] = [];
@@ -104,6 +105,100 @@ export async function readMemory(
 
       if (stats.isDirectory()) {
         try {
+          // Get the indexer
+          const indexer = getMemoryIndexer();
+          
+          // Try to get indexed files first
+          try {
+            const index = await indexer.getIndex(projectPath);
+            const categoryEntries = Object.entries(index.entries)
+              .filter(([path]) => {
+                // Only include files in the requested directory
+                if (!sanitizedPath) return true; // All files if no path specified
+                return path.startsWith(sanitizedPath);
+              })
+              .sort((a, b) => {
+                // Sort by access count (most accessed first)
+                const countA = a[1].accessCount || 0;
+                const countB = b[1].accessCount || 0;
+                
+                if (countA === countB) {
+                  // Then by updated date (newest first)
+                  const dateA = new Date(a[1].updated).getTime();
+                  const dateB = new Date(b[1].updated).getTime();
+                  return dateB - dateA;
+                }
+                
+                return countB - countA;
+              });
+              
+            if (categoryEntries.length > 0) {
+              let result = `# Memory Contents in ${sanitizedPath || "root memory directory"}\n\n`;
+              
+              // Group by tags
+              const tagGroups: Record<string, any[]> = {};
+              
+              // First collect entries for each tag
+              for (const [path, entry] of categoryEntries) {
+                for (const tag of entry.tags) {
+                  if (!tagGroups[tag]) {
+                    tagGroups[tag] = [];
+                  }
+                  tagGroups[tag].push({ path, entry });
+                }
+              }
+              
+              // Add files grouped by tags
+              if (Object.keys(tagGroups).length > 0) {
+                result += "## Files By Tag\n\n";
+                
+                for (const [tag, entries] of Object.entries(tagGroups)
+                    .sort((a, b) => b[1].length - a[1].length)
+                    .slice(0, 10)) { // Top 10 tags
+                  result += `### ${tag} (${entries.length} files)\n`;
+                  
+                  for (const { path, entry } of entries.slice(0, 5)) { // Top 5 files per tag
+                    result += `- **${entry.title}** (${path}) - ${entry.summary || "No summary"}\n`;
+                  }
+                  
+                  if (entries.length > 5) {
+                    result += `- ... and ${entries.length - 5} more files\n`;
+                  }
+                  
+                  result += "\n";
+                }
+              }
+              
+              // Add recently updated files
+              result += "## Recently Updated Files\n\n";
+              
+              const recentlyUpdated = [...categoryEntries]
+                .sort((a, b) => {
+                  const dateA = new Date(a[1].updated).getTime();
+                  const dateB = new Date(b[1].updated).getTime();
+                  return dateB - dateA;
+                })
+                .slice(0, 10); // Top 10 recently updated
+              
+              for (const [path, entry] of recentlyUpdated) {
+                result += `- **${entry.title}** (${path}) - Updated ${new Date(entry.updated).toLocaleDateString()}\n`;
+              }
+              
+              result += "\n## All Files in Directory\n\n";
+              for (const [path, entry] of categoryEntries) {
+                result += `- **${entry.title}** (${path})\n`;
+              }
+              
+              result += "\n\nUse the readFileTool to read any of these files. Example:\n\n```\n{\n  \"filePath\": \"" + categoryEntries[0][0] + "\"\n}\n```";
+              
+              return result;
+            }
+          } catch (indexError) {
+            log(`[Memory] No index found, falling back to filesystem: ${indexError}`, "system");
+            // Fall back to filesystem if index doesn't exist or has issues
+          }
+          
+          // Traditional filesystem-based approach as fallback
           const allFiles = await getAllFilesRecursively(fullMemoryPath);
           const formattedFiles = formatFilesList(allFiles, projectMemoryDir);
 
@@ -116,6 +211,16 @@ export async function readMemory(
         }
       } else {
         const relativePath = path.relative(projectMemoryDir, fullMemoryPath);
+        
+        // Record the memory file access in the index
+        try {
+          const indexer = getMemoryIndexer();
+          await indexer.recordAccess(relativePath, projectPath);
+        } catch (indexError) {
+          log(`[Memory] Error recording file access: ${indexError}`, "system");
+          // Continue even if indexing fails
+        }
+        
         return `Found memory file: ${relativePath}\n\nPlease use the readFileTool to read this file with:\n\n{
   "filePath": "${relativePath}"
 }`;
@@ -126,10 +231,21 @@ export async function readMemory(
       if (err.code === "ENOENT") {
         if (!memoryPath || memoryPath === "") {
           try {
-            return await initializeMemoryStructure(
+            const result = await initializeMemoryStructure(
               fullMemoryPath,
               resolvedProjectPath,
             );
+            
+            // Initialize index
+            try {
+              const indexer = getMemoryIndexer();
+              await indexer.reindexAll(projectPath);
+            } catch (indexError) {
+              log(`[Memory] Error initializing index: ${indexError}`, "system");
+              // Continue even if indexing fails
+            }
+            
+            return result;
           } catch (initError) {
             const err = initError as Error;
             return `Error initializing memory system: ${err.message}`;

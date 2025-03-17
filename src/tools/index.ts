@@ -323,6 +323,17 @@ export function getTools(): ToolSet {
   };
 }
 
+// Get tools for planner/orchestrator
+export function getPlannerTools() {
+  return {
+    readMemoryTool,
+    searchAgent,
+    readFileTool,
+    webSearchAgent: webSearchTool,
+    explainTool,
+  };
+}
+
 export {
   log,
   resetMemoryReadStatus,

@@ -8,6 +8,7 @@ import {
 import { markdownToTerminal } from "./markdown-to-terminal.js";
 import { generateDiff } from "./diff.js";
 import { TokenTracker } from "./tokenTracker.js";
+import { ContextManager, type AgentContext, type AgentPlan } from "./agentContext.js";
 
 export {
   log,
@@ -17,6 +18,9 @@ export {
   getSessionState,
   generateDiff,
   TokenTracker,
+  ContextManager,
   type SessionState,
   type CommandApprovalState,
+  type AgentContext,
+  type AgentPlan,
 };

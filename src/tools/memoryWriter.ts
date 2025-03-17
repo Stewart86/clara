@@ -8,6 +8,7 @@ import {
   sanitizeMemoryPath,
   createMemoryPath,
 } from "./memoryUtils.js";
+import { getMemoryIndexer } from "./memoryIndex.js";
 
 /**
  * Create a directory (restricted to ~/.config/clara/ directory)
@@ -60,6 +61,75 @@ export async function createDirectory(
  * @param projectPath Optional project path relative to home directory (determined automatically if not provided)
  * @returns Success message or error
  */
+/**
+ * Extract frontmatter and body from content
+ */
+function extractFrontmatter(content: string): { metadata: any; body: string } {
+  // Default empty metadata
+  const defaultMetadata = {
+    title: "Untitled",
+    created: new Date().toISOString(),
+    updated: new Date().toISOString(),
+    tags: []
+  };
+  
+  // Check if content has frontmatter (starts with ---)
+  if (!content.startsWith('---')) {
+    return { 
+      metadata: defaultMetadata, 
+      body: content 
+    };
+  }
+  
+  try {
+    // Find the second --- that closes the frontmatter
+    const endIndex = content.indexOf('---', 3);
+    if (endIndex === -1) {
+      return { 
+        metadata: defaultMetadata, 
+        body: content 
+      };
+    }
+    
+    // Extract the frontmatter section
+    const frontmatter = content.substring(3, endIndex).trim();
+    const body = content.substring(endIndex + 3).trim();
+    
+    // Parse the frontmatter as key-value pairs
+    const metadata: Record<string, any> = { ...defaultMetadata };
+    
+    for (const line of frontmatter.split('\n')) {
+      const trimmedLine = line.trim();
+      if (!trimmedLine || trimmedLine.startsWith('#')) {
+        continue;
+      }
+      
+      // Parse key-value pairs
+      const colonIndex = trimmedLine.indexOf(':');
+      if (colonIndex > 0) {
+        const key = trimmedLine.substring(0, colonIndex).trim();
+        let value = trimmedLine.substring(colonIndex + 1).trim();
+        
+        // Parse arrays (tags, related, etc.)
+        if (value.startsWith('[') && value.endsWith(']')) {
+          value = value.substring(1, value.length - 1);
+          metadata[key] = value.split(',').map(v => v.trim()).filter(v => v);
+        } else {
+          metadata[key] = value;
+        }
+      }
+    }
+    
+    return { metadata, body };
+  } catch (error) {
+    log(`[MemoryWrite] Error parsing frontmatter: ${error}`, "error");
+    return { 
+      metadata: defaultMetadata, 
+      body: content 
+    };
+  }
+}
+
 export async function writeMemory(
   filePath: string,
   content: string,
@@ -93,6 +163,19 @@ export async function writeMemory(
 
     // Write the file using Bun.write
     const bytesWritten = await write(fullPath, content);
+
+    // Extract metadata for indexing
+    const { metadata, body } = extractFrontmatter(content);
+    
+    // Update the memory index
+    try {
+      const indexer = getMemoryIndexer();
+      await indexer.indexMemoryFile(sanitizedPath, metadata, body, projectPath);
+      log(`[MemoryWrite] Successfully indexed ${sanitizedPath}`, "system");
+    } catch (indexError) {
+      log(`[MemoryWrite] Error indexing file: ${indexError}`, "error");
+      // Continue even if indexing fails
+    }
 
     log(
       `[MemoryWrite] Successfully wrote ${bytesWritten} bytes to ${fullPath}`,
