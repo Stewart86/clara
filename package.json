@@ -21,7 +21,7 @@
   "dependencies": {
     "@ai-sdk/anthropic": "^1.1.17",
     "@ai-sdk/openai": "^1.2.5",
-    "ai": "4.1.61",
+    "ai": "5.0.52",
     "boxen": "^8.0.1",
     "chalk": "^5.4.1",
     "cli-highlight": "^2.1.11",
